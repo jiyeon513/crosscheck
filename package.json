@@ -1,0 +1,25 @@
+{
+  "name": "crosscheck",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,green \"node server.mjs\" \"vite\"",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@stream-io/node-sdk": "^0.9.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "stream-chat": "^10.2.0",
+    "stream-chat-react": "^15.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4"
+  }
+}
