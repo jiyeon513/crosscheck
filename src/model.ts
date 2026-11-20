@@ -1,6 +1,10 @@
 export type Profile = {
   name: string;
-  role: string;
+};
+
+export type Quote = {
+  author: string;
+  text: string;
 };
 
 export type Group = {
@@ -16,9 +20,10 @@ export type TeamMessage = {
   groupId?: string;
   text: string;
   author: string;
-  role: string;
   createdAt: string;
   mine?: boolean;
+  quote?: Quote;
+  forwarded?: boolean;
 };
 
 export type AgentMessage = {
@@ -27,6 +32,7 @@ export type AgentMessage = {
   text: string;
   createdAt: string;
   from: "user" | "agent";
+  quote?: Quote;
 };
 
 export type Decision = {
@@ -34,7 +40,6 @@ export type Decision = {
   groupId: string;
   text: string;
   author: string;
-  role: string;
   createdAt: string;
 };
 
@@ -72,7 +77,6 @@ const SEED_MESSAGES: TeamMessage[] = [
     groupId: "cs473",
     text: "Let's get ready for our next project review.",
     author: "Alex",
-    role: "Testing & review",
     createdAt: "2026-11-16T10:00:00.000Z",
   },
   {
@@ -80,7 +84,6 @@ const SEED_MESSAGES: TeamMessage[] = [
     groupId: "cs473",
     text: "I'll bring the screen flow to the review.",
     author: "Jia",
-    role: "Frontend",
     createdAt: "2026-11-16T10:04:00.000Z",
   },
   {
@@ -88,7 +91,6 @@ const SEED_MESSAGES: TeamMessage[] = [
     groupId: "hci201",
     text: "The interview notes are in the shared doc.",
     author: "Mina",
-    role: "Research",
     createdAt: "2026-10-20T09:12:00.000Z",
   },
 ];
@@ -99,7 +101,6 @@ const SEED_DECISIONS: Decision[] = [
     groupId: "cs473",
     text: "Next phase is a clickable Figma flow, then coding.",
     author: "Jun",
-    role: "UI/UX design",
     createdAt: "2026-11-09T08:30:00.000Z",
   },
   {
@@ -107,7 +108,6 @@ const SEED_DECISIONS: Decision[] = [
     groupId: "cs473",
     text: "Review the prototype with the whole team on Monday.",
     author: "Alex",
-    role: "Testing & review",
     createdAt: "2026-11-12T14:10:00.000Z",
   },
   {
@@ -115,7 +115,6 @@ const SEED_DECISIONS: Decision[] = [
     groupId: "hci201",
     text: "Park the interview script until the prototype is clickable.",
     author: "Mina",
-    role: "Research",
     createdAt: "2026-10-18T11:00:00.000Z",
   },
 ];
@@ -177,7 +176,15 @@ function saveStore(store: Store) {
 }
 
 export function loadProfile(): Profile | null {
-  return loadStore().profile;
+  const profile = loadStore().profile;
+  return profile?.name ? { name: profile.name } : null;
+}
+
+export function logout() {
+  const store = loadStore();
+  store.profile = null;
+  saveStore(store);
+  sessionStorage.removeItem(CURRENT_KEY);
 }
 
 export function saveProfile(profile: Profile) {
@@ -269,5 +276,5 @@ export function cleanCode(value: string) {
 export function agentReply(name: string, text: string) {
   const line = text.trim().split("\n").find(Boolean) ?? text.trim();
   const clipped = line.length > 160 ? `${line.slice(0, 157)}...` : line;
-  return `I kept this with your note, ${name}:\n"${clipped}"\nDrag a bubble to the other box, or drop it on the decision log if the team should keep it.`;
+  return `I kept this with your note, ${name}: "${clipped}"\nDrag any bubble into the other chat, or onto the decision log if the team should keep it.`;
 }
