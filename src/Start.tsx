@@ -61,7 +61,7 @@ export function CreateChat({
       setCurrentGroup(joined.code);
       onCreated(joined.code);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create the chat.");
+      setError(caught instanceof Error ? caught.message : "Could not create the group.");
     } finally {
       setPending(false);
     }
@@ -73,21 +73,21 @@ export function CreateChat({
         <span className="step-icon create" aria-hidden="true">
           +
         </span>
-        <h1>Create a chat</h1>
-        <p className="muted">Give it a name your team will recognize. You'll get an invitation code next.</p>
+        <h1>Create a group</h1>
+        <p className="muted">One group per team project. You'll schedule meetings inside it and get an invitation code next.</p>
         <label>
-          Chat name
+          Group name
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="CS473 · Prototype meeting"
+            placeholder="CS473 · Team project"
             maxLength={80}
             autoFocus
           />
         </label>
         {error ? <p className="error">{error}</p> : null}
         <button className="btn primary block" type="submit" disabled={!title.trim() || pending}>
-          {pending ? "Creating..." : "Create chat"}
+          {pending ? "Creating..." : "Create group"}
         </button>
       </form>
     </StartLayout>
@@ -127,7 +127,7 @@ export function JoinChat({
       setCurrentGroup(joined.code);
       onJoined(joined.code);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not join the chat.");
+      setError(caught instanceof Error ? caught.message : "Could not join the group.");
     } finally {
       setPending(false);
     }
@@ -139,7 +139,7 @@ export function JoinChat({
         <span className="step-icon join" aria-hidden="true">
           #
         </span>
-        <h1>Join a chat</h1>
+        <h1>Join a group</h1>
         <p className="muted">Enter the invitation code a teammate shared with you.</p>
         <label>
           Invitation code
@@ -161,7 +161,7 @@ export function JoinChat({
           type="submit"
           disabled={cleanCode(code).length === 0 || pending}
         >
-          {pending ? "Joining..." : "Join chat"}
+          {pending ? "Joining..." : "Join group"}
         </button>
       </form>
     </StartLayout>
@@ -207,7 +207,7 @@ export function InviteCode({
           {copied ? "Copied!" : "Copy code"}
         </button>
         <button className="btn primary block" type="button" onClick={onEnter}>
-          Enter chat
+          Enter group
         </button>
       </div>
     </StartLayout>

@@ -7,21 +7,30 @@ import {
   agentThread,
   decisionsFor,
   demoMessagesFor,
+  formatMeetingTime,
   markOpened,
+  meetingStatus,
+  meetingsFor,
+  pickActiveMeeting,
   saveAgentThread,
   saveDecisions,
+  saveMeetings,
+  sortMeetings,
   type AgentMessage,
   type Decision,
   type Group,
+  type Meeting,
   type Profile,
   type Quote,
   type TeamMessage,
 } from "./model";
 import { Avatar } from "./ui";
+import MeetingsPanel, { LOOSE } from "./Meetings";
 
 type Source = "team" | "agent" | "user";
 type Carried = { from: Source | ""; author: string; text: string };
-type Target = "team" | "agent" | "log";
+/** "team", "agent", "log:" (the selected meeting) or "log:<meetingId>". */
+type Target = string;
 
 let carried: Carried | null = null;
 
@@ -32,7 +41,13 @@ type WireMessage = {
   text?: string;
   created_at?: unknown;
   user?: { id?: string; name?: string } | null;
-  custom?: { kind?: string; quote?: Quote; forwarded?: boolean } | null;
+  custom?: {
+    kind?: string;
+    quote?: Quote;
+    forwarded?: boolean;
+    meetingId?: string;
+    meeting?: Meeting;
+  } | null;
 };
 
 export default function Room({
@@ -56,7 +71,10 @@ export default function Room({
   const [teamQuote, setTeamQuote] = useState<Quote | null>(null);
   const [agentDraft, setAgentDraft] = useState("");
   const [agentQuote, setAgentQuote] = useState<Quote | null>(null);
-  const [decisionDraft, setDecisionDraft] = useState("");
+  const [meetings, setMeetings] = useState<Meeting[]>(() => meetingsFor(group.id));
+  const [activeId, setActiveId] = useState<string | null>(
+    () => pickActiveMeeting(meetingsFor(group.id))?.id ?? null,
+  );
   const [over, setOver] = useState<Target | null>(null);
   const [dragging, setDragging] = useState<Source | null>(null);
   const [notice, setNotice] = useState("");
@@ -133,18 +151,25 @@ export default function Room({
     saveAgentThread(group.id, profile.name, next);
   }
 
-  async function recordDecision(text: string) {
+  /** Where a drop on the panel itself (not a specific meeting) should go. */
+  function defaultMeetingId() {
+    if (activeId !== null) return activeId;
+    return pickActiveMeeting(meetings)?.id ?? LOOSE;
+  }
+
+  async function recordDecision(meetingId: string, text: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
     const entry: Decision = {
       id: `dec_${crypto.randomUUID()}`,
       groupId: group.id,
+      ...(meetingId ? { meetingId } : {}),
       text: trimmed,
       author: profile.name,
       createdAt: new Date().toISOString(),
     };
     rememberDecisions([...decisions.filter((item) => item.id !== entry.id), entry]);
-    setDecisionDraft("");
+    setActiveId(meetingId);
     if (!logOpen) {
       setFlash(true);
       setTimeout(() => setFlash(false), 900);
@@ -153,12 +178,50 @@ export default function Room({
     if (!channel) return;
     try {
       await channel.sendMessage({
-        message: { id: entry.id, text: entry.text, custom: { kind: "decision" } },
+        message: {
+          id: entry.id,
+          text: entry.text,
+          custom: { kind: "decision", ...(meetingId ? { meetingId } : {}) },
+        },
       });
       setNotice("");
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : "Saved on this device only.");
     }
+  }
+
+  async function scheduleMeeting(title: string, startsAt: string) {
+    const meeting: Meeting = {
+      id: `mtg_${crypto.randomUUID()}`,
+      groupId: group.id,
+      title,
+      startsAt,
+      createdBy: profile.name,
+      createdAt: new Date().toISOString(),
+    };
+    const next = sortMeetings([...meetings, meeting]);
+    setMeetings(next);
+    saveMeetings(group.id, next);
+    setActiveId(meeting.id);
+    const channel = channelRef.current;
+    if (!channel) return;
+    try {
+      await channel.sendMessage({
+        message: {
+          id: meeting.id,
+          text: `Scheduled ${title} · ${formatMeetingTime(startsAt)}`,
+          custom: { kind: "meeting", meeting },
+        },
+      });
+      setNotice("");
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Saved on this device only.");
+    }
+  }
+
+  function openMeeting(id: string) {
+    setActiveId(id);
+    if (!logOpen) toggleLog();
   }
 
   async function sendTeam(event: FormEvent) {
@@ -203,7 +266,11 @@ export default function Room({
       {
         id: crypto.randomUUID(),
         label: "From your note",
-        text: agentReply(profile.name, text || quote!.text),
+        text: agentReply(
+          profile.name,
+          text || quote!.text,
+          meetings.find((item) => item.id === defaultMeetingId()) ?? null,
+        ),
         createdAt: new Date(Date.now() + 1).toISOString(),
         from: "agent",
       },
@@ -217,6 +284,7 @@ export default function Room({
     return {
       onDragOver: (event: DragEvent) => {
         event.preventDefault();
+        event.stopPropagation();
         event.dataTransfer.dropEffect = "copy";
         if (over !== target) setOver(target);
       },
@@ -231,13 +299,15 @@ export default function Room({
 
   function acceptDrop(event: DragEvent, target: Target) {
     event.preventDefault();
+    event.stopPropagation();
     const payload = readDrop(event);
     setOver(null);
     setDragging(null);
     carried = null;
     if (!payload) return;
-    if (target === "log") {
-      void recordDecision(payload.text);
+    if (target.startsWith("log:")) {
+      const meetingId = target === "log:" ? defaultMeetingId() : target.slice(4);
+      void recordDecision(meetingId, payload.text);
       return;
     }
     const quote = { author: payload.author, text: payload.text };
@@ -255,7 +325,11 @@ export default function Room({
     }
   }
 
-  const stamp = teamMessages.at(-1)?.createdAt;
+  const now = new Date();
+  const upcoming = meetings.find(
+    (item) => meetingStatus(item, now) !== "past" && new Date(item.startsAt) > now,
+  );
+  const timeline = buildTimeline(teamMessages, meetings, now);
   const dragProps = {
     onDragState: (from: Source | null) => {
       setDragging(from);
@@ -274,7 +348,12 @@ export default function Room({
           <Logo />
           <span className="divider" aria-hidden="true" />
           <h1>{group.title}</h1>
-          <button className="code-chip" type="button" onClick={copyCode} title="Copy invitation code">
+          <button
+            className="code-chip"
+            type="button"
+            onClick={copyCode}
+            title="Copy invitation code"
+          >
             {copied ? "Copied" : group.code.toUpperCase()}
           </button>
         </div>
@@ -289,26 +368,51 @@ export default function Room({
           <header className="panel-head">
             <div>
               <h2>Team conversation</h2>
-              <p>{stamp ? formatStamp(stamp) : "No messages yet"}</p>
+              <p>One ongoing chat across every meeting</p>
             </div>
             <People people={people} />
           </header>
+          {upcoming ? (
+            <button className="next-meeting" type="button" onClick={() => openMeeting(upcoming.id)}>
+              <span className="next-dot" aria-hidden="true" />
+              <span>
+                Next: <strong>{upcoming.title}</strong> · {formatWhen(upcoming.startsAt)}
+              </span>
+              <span className="next-link">Decision log ›</span>
+            </button>
+          ) : null}
           <div className="thread">
-            {teamMessages.length === 0 ? (
+            {timeline.length === 0 ? (
               <p className="empty">Say hello to the team.</p>
             ) : (
-              teamMessages.map((message) => (
-                <Bubble
-                  key={message.id}
-                  from="team"
-                  mine={message.mine}
-                  author={message.author}
-                  text={message.text}
-                  quote={message.quote}
-                  forwarded={message.forwarded}
-                  {...dragProps}
-                />
-              ))
+              timeline.map((item) =>
+                item.kind === "meeting" ? (
+                  <button
+                    key={`m-${item.meeting.id}`}
+                    className={
+                      activeId === item.meeting.id ? "meeting-divider on" : "meeting-divider"
+                    }
+                    type="button"
+                    onClick={() => openMeeting(item.meeting.id)}
+                    title="Open this meeting's decision log"
+                  >
+                    <span>
+                      {item.meeting.title} · {formatMeetingTime(item.meeting.startsAt)}
+                    </span>
+                  </button>
+                ) : (
+                  <Bubble
+                    key={item.message.id}
+                    from="team"
+                    mine={item.message.mine}
+                    author={item.message.author}
+                    text={item.message.text}
+                    quote={item.message.quote}
+                    forwarded={item.message.forwarded}
+                    {...dragProps}
+                  />
+                ),
+              )
             )}
             <div ref={teamEnd} />
           </div>
@@ -321,8 +425,15 @@ export default function Room({
                 channelRef.current = channel;
                 setReady(true);
               }}
-              onWire={(chat, liveDecisions) => {
+              onWire={(chat, liveDecisions, liveMeetings) => {
                 setLiveChat(chat);
+                if (liveMeetings.length) {
+                  setMeetings((current) => {
+                    const merged = sortMeetings(mergeById(current, liveMeetings));
+                    saveMeetings(group.id, merged);
+                    return merged;
+                  });
+                }
                 if (liveDecisions.length) {
                   setDecisions((current) => {
                     const merged = mergeDecisions(current, liveDecisions);
@@ -350,92 +461,20 @@ export default function Room({
           />
         </section>
 
-        <section
-          className={[
-            "log-panel",
-            logOpen ? "open" : "closed",
-            over === "log" ? "over" : "",
-            dragging ? "active" : "",
-            flash ? "flash" : "",
-          ].join(" ")}
-          {...dropZone("log")}
-        >
-          {logOpen ? (
-            <>
-              <header className="panel-head">
-                <div>
-                  <h2>
-                    Decision log <span className="count">{decisions.length}</span>
-                  </h2>
-                  <p>What the team agreed on</p>
-                </div>
-                <button
-                  className="icon-btn"
-                  type="button"
-                  onClick={toggleLog}
-                  aria-label="Collapse decision log"
-                  aria-expanded="true"
-                  title="Collapse"
-                >
-                  ‹›
-                </button>
-              </header>
-              <div className="thread">
-                {decisions.length === 0 ? (
-                  <p className="empty">Drop a message here when the team agrees.</p>
-                ) : (
-                  decisions.map((decision) => (
-                    <article className="decision" key={decision.id}>
-                      <span className="decision-dot" aria-hidden="true" />
-                      <div>
-                        <p className="decision-meta">
-                          {formatShort(decision.createdAt)} · {decision.author}
-                        </p>
-                        <p className="decision-text">{decision.text}</p>
-                      </div>
-                    </article>
-                  ))
-                )}
-              </div>
-              <form
-                className="composer log-composer"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void recordDecision(decisionDraft);
-                }}
-              >
-                <div className="composer-row">
-                  <input
-                    value={decisionDraft}
-                    onChange={(event) => setDecisionDraft(event.target.value)}
-                    placeholder="Write a decision"
-                    aria-label="Write a decision"
-                  />
-                  <button className="btn primary small" type="submit" disabled={!decisionDraft.trim()}>
-                    Record
-                  </button>
-                </div>
-              </form>
-            </>
-          ) : (
-            <button
-              className="log-rail"
-              type="button"
-              onClick={toggleLog}
-              aria-label="Expand decision log"
-              aria-expanded="false"
-            >
-              <span className="rail-icon" aria-hidden="true">
-                ✓
-              </span>
-              <span className="count">{decisions.length}</span>
-              <span className="rail-label">Decision log</span>
-            </button>
-          )}
-          <div className="drop-overlay" aria-hidden="true">
-            <span>Drop to record as a decision</span>
-          </div>
-        </section>
+        <MeetingsPanel
+          meetings={meetings}
+          decisions={decisions}
+          activeId={activeId}
+          onSelect={setActiveId}
+          open={logOpen}
+          onToggle={toggleLog}
+          onSchedule={(title, startsAt) => void scheduleMeeting(title, startsAt)}
+          onRecord={(meetingId, text) => void recordDecision(meetingId, text)}
+          zone={dropZone}
+          over={over}
+          dragging={dragging !== null}
+          flash={flash}
+        />
 
         <section className="chat-panel agent-panel">
           <header className="panel-head agent-head">
@@ -525,7 +564,12 @@ function Composer({
   canSend: boolean;
   dropLabel: string;
 }) {
-  const className = ["composer", `${tone}-composer`, active ? "active" : "", over ? "over" : ""].join(" ");
+  const className = [
+    "composer",
+    `${tone}-composer`,
+    active ? "active" : "",
+    over ? "over" : "",
+  ].join(" ");
   return (
     <form className={className} onSubmit={onSubmit} {...zone}>
       {quote ? (
@@ -534,7 +578,12 @@ function Composer({
             <p className="quote-author">↪ {quote.author}</p>
             <p className="quote-text">{quote.text}</p>
           </div>
-          <button className="icon-btn small" type="button" onClick={onClearQuote} aria-label="Remove attached message">
+          <button
+            className="icon-btn small"
+            type="button"
+            onClick={onClearQuote}
+            aria-label="Remove attached message"
+          >
             ×
           </button>
         </div>
@@ -569,7 +618,7 @@ function LiveChannel({
   groupId: string;
   profile: Profile;
   onChannel: (channel: Channel) => void;
-  onWire: (chat: TeamMessage[], decisions: Decision[]) => void;
+  onWire: (chat: TeamMessage[], decisions: Decision[], meetings: Meeting[]) => void;
   onError: (message: string) => void;
 }) {
   const client = useCreateChatClient({
@@ -620,18 +669,29 @@ function publish(
   userId: string,
   profile: Profile,
   groupId: string,
-  onWire: (chat: TeamMessage[], decisions: Decision[]) => void,
+  onWire: (chat: TeamMessage[], decisions: Decision[], meetings: Meeting[]) => void,
 ) {
   const messages = (channel.messagePaginator.items ?? []) as unknown as WireMessage[];
   const chat: TeamMessage[] = [];
   const decisions: Decision[] = [];
+  const meetings: Meeting[] = [];
   for (const message of messages) {
     const text = message.text?.trim() ?? "";
     if (!text || !message.id) continue;
     const author = message.user?.name || profile.name;
     const createdAt = toIso(message.created_at);
-    if (message.custom?.kind === "decision") {
-      decisions.push({ id: message.id, groupId, text, author, createdAt });
+    const custom = message.custom;
+    if (custom?.kind === "meeting" && custom.meeting?.id && custom.meeting.startsAt) {
+      meetings.push({ ...custom.meeting, groupId });
+    } else if (custom?.kind === "decision") {
+      decisions.push({
+        id: message.id,
+        groupId,
+        ...(custom.meetingId ? { meetingId: custom.meetingId } : {}),
+        text,
+        author,
+        createdAt,
+      });
     } else {
       const quote = message.custom?.quote;
       chat.push({
@@ -644,7 +704,7 @@ function publish(
       });
     }
   }
-  onWire(chat, decisions);
+  onWire(chat, decisions, meetings);
 }
 
 function Bubble({
@@ -762,6 +822,27 @@ function readDrop(event: DragEvent): Carried | null {
   return text ? { from: "", author: "Pasted text", text } : null;
 }
 
+type TimelineItem =
+  | { kind: "message"; at: string; message: TeamMessage }
+  | { kind: "meeting"; at: string; meeting: Meeting };
+
+/** The team chat is one long thread; meetings that have started appear as dividers in it. */
+function buildTimeline(messages: TeamMessage[], meetings: Meeting[], now: Date): TimelineItem[] {
+  const items: TimelineItem[] = [
+    ...messages.map((message) => ({ kind: "message" as const, at: message.createdAt, message })),
+    ...meetings
+      .filter((meeting) => new Date(meeting.startsAt) <= now)
+      .map((meeting) => ({ kind: "meeting" as const, at: meeting.startsAt, meeting })),
+  ];
+  return items.sort((a, b) => a.at.localeCompare(b.at) || (a.kind === "meeting" ? -1 : 1));
+}
+
+function mergeById<T extends { id: string }>(current: T[], incoming: T[]) {
+  const map = new Map(current.map((item) => [item.id, item]));
+  for (const item of incoming) map.set(item.id, { ...map.get(item.id), ...item });
+  return [...map.values()];
+}
+
 function mergeDecisions(current: Decision[], incoming: Decision[]) {
   const map = new Map(current.map((item) => [item.id, item]));
   for (const item of incoming) map.set(item.id, item);
@@ -781,13 +862,13 @@ function toIso(value: unknown) {
   return new Date().toISOString();
 }
 
-function formatStamp(value: string) {
+function formatWhen(value: string) {
   const date = new Date(value);
-  const day = date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const day = date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
   const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  return `${day} · ${time}`;
-}
-
-function formatShort(value: string) {
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `${day}, ${time}`;
 }

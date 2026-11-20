@@ -15,6 +15,15 @@ export type Group = {
   openedAt: string;
 };
 
+export type Meeting = {
+  id: string;
+  groupId: string;
+  title: string;
+  startsAt: string;
+  createdBy: string;
+  createdAt: string;
+};
+
 export type TeamMessage = {
   id: string;
   groupId?: string;
@@ -38,19 +47,23 @@ export type AgentMessage = {
 export type Decision = {
   id: string;
   groupId: string;
+  meetingId?: string;
   text: string;
   author: string;
   createdAt: string;
 };
 
 type Store = {
+  version: number;
   profile: Profile | null;
   groups: Group[];
+  meetings: Meeting[];
   decisions: Decision[];
   demoMessages: TeamMessage[];
   agent: Record<string, AgentMessage[]>;
 };
 
+const STORE_VERSION = 2;
 const STORE_KEY = "crosscheck.v1";
 const CURRENT_KEY = "crosscheck.current";
 
@@ -58,7 +71,7 @@ const SEED_GROUPS: Group[] = [
   {
     id: "cs473",
     code: "cs473",
-    title: "CS473 · Prototype meeting",
+    title: "CS473 · Team project",
     createdAt: "2026-11-02T10:00:00.000Z",
     openedAt: "2026-11-16T10:00:00.000Z",
   },
@@ -71,27 +84,81 @@ const SEED_GROUPS: Group[] = [
   },
 ];
 
+/** Local wall-clock time, so seeds read as "2 PM" wherever the demo runs. */
+function at(y: number, m: number, d: number, h: number, min = 0) {
+  return new Date(y, m - 1, d, h, min).toISOString();
+}
+
+const SEED_MEETINGS: Meeting[] = [
+  {
+    id: "mtg-cs473-proto",
+    groupId: "cs473",
+    title: "Prototype meeting",
+    startsAt: at(2026, 11, 10, 14),
+    createdBy: "Jun",
+    createdAt: at(2026, 11, 3, 10),
+  },
+  {
+    id: "mtg-cs473-testing",
+    groupId: "cs473",
+    title: "User testing meeting",
+    startsAt: at(2026, 11, 15, 15),
+    createdBy: "Alex",
+    createdAt: at(2026, 11, 10, 15),
+  },
+  {
+    id: "mtg-cs473-final",
+    groupId: "cs473",
+    title: "Final review",
+    startsAt: at(2026, 11, 24, 14),
+    createdBy: "Jia",
+    createdAt: at(2026, 11, 16, 10),
+  },
+  {
+    id: "mtg-hci-interview",
+    groupId: "hci201",
+    title: "Interview planning",
+    startsAt: at(2026, 10, 18, 11),
+    createdBy: "Mina",
+    createdAt: at(2026, 10, 12, 9),
+  },
+];
+
 const SEED_MESSAGES: TeamMessage[] = [
+  {
+    id: "demo-jun-1",
+    groupId: "cs473",
+    text: "Let's lock the screen flow before anyone starts coding.",
+    author: "Jun",
+    createdAt: at(2026, 11, 10, 14, 6),
+  },
+  {
+    id: "demo-alex-1",
+    groupId: "cs473",
+    text: "Testers got stuck on the second screen. The back button is hard to find.",
+    author: "Alex",
+    createdAt: at(2026, 11, 15, 15, 12),
+  },
   {
     id: "demo-alex",
     groupId: "cs473",
     text: "Let's get ready for our next project review.",
     author: "Alex",
-    createdAt: "2026-11-16T10:00:00.000Z",
+    createdAt: at(2026, 11, 16, 10),
   },
   {
     id: "demo-jia",
     groupId: "cs473",
     text: "I'll bring the screen flow to the review.",
     author: "Jia",
-    createdAt: "2026-11-16T10:04:00.000Z",
+    createdAt: at(2026, 11, 16, 10, 4),
   },
   {
     id: "demo-mina",
     groupId: "hci201",
     text: "The interview notes are in the shared doc.",
     author: "Mina",
-    createdAt: "2026-10-20T09:12:00.000Z",
+    createdAt: at(2026, 10, 20, 9, 12),
   },
 ];
 
@@ -99,23 +166,34 @@ const SEED_DECISIONS: Decision[] = [
   {
     id: "decision-cs473-1",
     groupId: "cs473",
+    meetingId: "mtg-cs473-proto",
     text: "Next phase is a clickable Figma flow, then coding.",
     author: "Jun",
-    createdAt: "2026-11-09T08:30:00.000Z",
+    createdAt: at(2026, 11, 10, 14, 40),
+  },
+  {
+    id: "decision-cs473-3",
+    groupId: "cs473",
+    meetingId: "mtg-cs473-proto",
+    text: "Jia owns the screen flow; Jun owns visual style.",
+    author: "Jia",
+    createdAt: at(2026, 11, 10, 14, 52),
   },
   {
     id: "decision-cs473-2",
     groupId: "cs473",
-    text: "Review the prototype with the whole team on Monday.",
+    meetingId: "mtg-cs473-testing",
+    text: "Move the back button to the top-left on every screen.",
     author: "Alex",
-    createdAt: "2026-11-12T14:10:00.000Z",
+    createdAt: at(2026, 11, 15, 15, 30),
   },
   {
     id: "decision-hci-1",
     groupId: "hci201",
+    meetingId: "mtg-hci-interview",
     text: "Park the interview script until the prototype is clickable.",
     author: "Mina",
-    createdAt: "2026-10-18T11:00:00.000Z",
+    createdAt: at(2026, 10, 18, 11, 30),
   },
 ];
 
@@ -123,9 +201,9 @@ const SEED_AGENT: Record<string, AgentMessage[]> = {
   cs473: [
     {
       id: "agent-cs473",
-      label: "From your preparation",
-      text: "You planned a clickable Figma flow, with coding in the next phase.",
-      createdAt: "2026-11-16T09:40:00.000Z",
+      label: "Carried over from earlier meetings",
+      text: "Prototype meeting (Nov 10): clickable Figma flow first, then coding.\nUser testing (Nov 15): move the back button to the top-left.\nNext up is the Final review.",
+      createdAt: at(2026, 11, 16, 9, 40),
       from: "agent",
     },
   ],
@@ -134,7 +212,7 @@ const SEED_AGENT: Record<string, AgentMessage[]> = {
       id: "agent-hci201",
       label: "From last time",
       text: "The group paused interviews until the prototype could be clicked through.",
-      createdAt: "2026-10-20T09:00:00.000Z",
+      createdAt: at(2026, 10, 20, 9),
       from: "agent",
     },
   ],
@@ -142,11 +220,35 @@ const SEED_AGENT: Record<string, AgentMessage[]> = {
 
 function emptyStore(): Store {
   return {
+    version: STORE_VERSION,
     profile: null,
     groups: SEED_GROUPS,
+    meetings: SEED_MEETINGS,
     decisions: SEED_DECISIONS,
     demoMessages: SEED_MESSAGES,
     agent: {},
+  };
+}
+
+/** Bring data saved before meetings existed onto the new shape, keeping the profile and user groups. */
+function migrate(parsed: Partial<Store>): Store {
+  const groups = (parsed.groups?.length ? parsed.groups : SEED_GROUPS).map((group) =>
+    group.id === "cs473" && group.title === "CS473 · Prototype meeting"
+      ? { ...group, title: "CS473 · Team project" }
+      : group,
+  );
+  const seedIds = new Set(SEED_DECISIONS.map((item) => item.id));
+  const legacy = (parsed.decisions ?? []).filter(
+    (item) => !seedIds.has(item.id) && !item.id.startsWith("decision-"),
+  );
+  return {
+    version: STORE_VERSION,
+    profile: parsed.profile ?? null,
+    groups,
+    meetings: SEED_MEETINGS,
+    decisions: [...SEED_DECISIONS, ...legacy],
+    demoMessages: SEED_MESSAGES,
+    agent: parsed.agent ?? {},
   };
 }
 
@@ -159,9 +261,16 @@ function loadStore(): Store {
       return seeded;
     }
     const parsed = JSON.parse(raw) as Partial<Store>;
+    if ((parsed.version ?? 1) < STORE_VERSION) {
+      const migrated = migrate(parsed);
+      saveStore(migrated);
+      return migrated;
+    }
     return {
+      version: STORE_VERSION,
       profile: parsed.profile ?? null,
       groups: parsed.groups?.length ? parsed.groups : SEED_GROUPS,
+      meetings: parsed.meetings ?? [],
       decisions: parsed.decisions ?? [],
       demoMessages: parsed.demoMessages ?? SEED_MESSAGES,
       agent: parsed.agent ?? {},
@@ -194,7 +303,9 @@ export function saveProfile(profile: Profile) {
 }
 
 export function loadGroups(): Group[] {
-  return loadStore().groups.slice().sort((a, b) => b.openedAt.localeCompare(a.openedAt));
+  return loadStore()
+    .groups.slice()
+    .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
 }
 
 export function saveGroup(group: Group) {
@@ -225,6 +336,43 @@ export function getCurrentGroup(): string | null {
   return sessionStorage.getItem(CURRENT_KEY);
 }
 
+export function meetingsFor(groupId: string): Meeting[] {
+  return sortMeetings(loadStore().meetings.filter((item) => item.groupId === groupId));
+}
+
+export function saveMeetings(groupId: string, meetings: Meeting[]) {
+  const store = loadStore();
+  store.meetings = [...store.meetings.filter((item) => item.groupId !== groupId), ...meetings];
+  saveStore(store);
+}
+
+export function sortMeetings(meetings: Meeting[]) {
+  return meetings.slice().sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+}
+
+export type MeetingStatus = "past" | "today" | "upcoming";
+
+export function meetingStatus(meeting: Meeting, now = new Date()): MeetingStatus {
+  const start = new Date(meeting.startsAt);
+  if (start.toDateString() === now.toDateString()) return "today";
+  return start < now ? "past" : "upcoming";
+}
+
+/** The meeting decisions should land in by default: today's, else the next one, else the latest. */
+export function pickActiveMeeting(meetings: Meeting[], now = new Date()): Meeting | null {
+  const sorted = sortMeetings(meetings);
+  return (
+    sorted.find((item) => meetingStatus(item, now) === "today") ??
+    sorted.find((item) => meetingStatus(item, now) === "upcoming") ??
+    sorted.at(-1) ??
+    null
+  );
+}
+
+export function nextMeeting(groupId: string, now = new Date()): Meeting | null {
+  return meetingsFor(groupId).find((item) => meetingStatus(item, now) !== "past") ?? null;
+}
+
 export function decisionsFor(groupId: string): Decision[] {
   return loadStore()
     .decisions.filter((item) => item.groupId === groupId)
@@ -233,10 +381,7 @@ export function decisionsFor(groupId: string): Decision[] {
 
 export function saveDecisions(groupId: string, decisions: Decision[]) {
   const store = loadStore();
-  store.decisions = [
-    ...store.decisions.filter((item) => item.groupId !== groupId),
-    ...decisions,
-  ];
+  store.decisions = [...store.decisions.filter((item) => item.groupId !== groupId), ...decisions];
   saveStore(store);
 }
 
@@ -273,8 +418,16 @@ export function cleanCode(value: string) {
     .slice(0, 40);
 }
 
-export function agentReply(name: string, text: string) {
+export function agentReply(name: string, text: string, meeting: Meeting | null) {
   const line = text.trim().split("\n").find(Boolean) ?? text.trim();
   const clipped = line.length > 160 ? `${line.slice(0, 157)}...` : line;
-  return `I kept this with your note, ${name}: "${clipped}"\nDrag any bubble into the other chat, or onto the decision log if the team should keep it.`;
+  const where = meeting ? ` for ${meeting.title} (${formatMeetingTime(meeting.startsAt)})` : "";
+  return `Noted${where}, ${name}: "${clipped}"\nDrag a bubble into the team chat, or onto a meeting's decision log if the team should keep it.`;
+}
+
+export function formatMeetingTime(value: string) {
+  const date = new Date(value);
+  const day = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${day}, ${time}`;
 }

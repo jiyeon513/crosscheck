@@ -1,4 +1,4 @@
-import { loadGroups, type Profile } from "./model";
+import { formatMeetingTime, loadGroups, meetingsFor, nextMeeting, type Profile } from "./model";
 import { Logo } from "./api";
 import { Avatar } from "./ui";
 
@@ -36,7 +36,10 @@ export default function Home({
       <section className="page">
         <div className="page-copy">
           <h1>Hi {profile.name}, what's next?</h1>
-          <p>Start a new chat for your team, or join one with an invitation code.</p>
+          <p>
+            Start a group for your team project, or join one with an invitation code. Each group
+            keeps one ongoing chat and a decision log for every meeting.
+          </p>
         </div>
 
         <div className="choices">
@@ -45,8 +48,8 @@ export default function Home({
               +
             </span>
             <span className="choice-body">
-              <strong>Create a chat</strong>
-              <span>Name it and get an invitation code to share.</span>
+              <strong>Create a group</strong>
+              <span>One per team project. You get an invitation code to share.</span>
             </span>
             <span className="choice-arrow" aria-hidden="true">
               →
@@ -57,7 +60,7 @@ export default function Home({
               #
             </span>
             <span className="choice-body">
-              <strong>Join a chat</strong>
+              <strong>Join a group</strong>
               <span>Enter the code someone on your team sent you.</span>
             </span>
             <span className="choice-arrow" aria-hidden="true">
@@ -67,32 +70,42 @@ export default function Home({
         </div>
 
         <section className="group-section">
-          <h2>Your chats</h2>
+          <h2>Your groups</h2>
           {groups.length === 0 ? (
-            <p className="muted">Chats you create or join will show up here.</p>
+            <p className="muted">Groups you create or join will show up here.</p>
           ) : (
             <div className="group-list">
-              {groups.map((group) => (
-                <article className="group-card" key={group.id}>
-                  <button className="group-open" type="button" onClick={() => onOpen(group.id)}>
-                    <span className="group-initial" aria-hidden="true">
-                      {group.title.trim().charAt(0).toUpperCase() || "#"}
-                    </span>
-                    <span className="group-text">
-                      <strong>{group.title}</strong>
-                      <span>Last opened {formatDate(group.openedAt)}</span>
-                    </span>
-                  </button>
-                  <button
-                    className="code-chip"
-                    type="button"
-                    onClick={() => onShowCode(group.id)}
-                    title="Show invitation code"
-                  >
-                    {group.code.toUpperCase()}
-                  </button>
-                </article>
-              ))}
+              {groups.map((group) => {
+                const next = nextMeeting(group.id);
+                const count = meetingsFor(group.id).length;
+                return (
+                  <article className="group-card" key={group.id}>
+                    <button className="group-open" type="button" onClick={() => onOpen(group.id)}>
+                      <span className="group-initial" aria-hidden="true">
+                        {group.title.trim().charAt(0).toUpperCase() || "#"}
+                      </span>
+                      <span className="group-text">
+                        <strong>{group.title}</strong>
+                        <span>
+                          {next
+                            ? `Next: ${next.title} · ${formatMeetingTime(next.startsAt)}`
+                            : count
+                              ? `${count} meeting${count === 1 ? "" : "s"} · last opened ${formatDate(group.openedAt)}`
+                              : `No meetings yet · last opened ${formatDate(group.openedAt)}`}
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      className="code-chip"
+                      type="button"
+                      onClick={() => onShowCode(group.id)}
+                      title="Show invitation code"
+                    >
+                      {group.code.toUpperCase()}
+                    </button>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
