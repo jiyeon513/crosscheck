@@ -21,7 +21,5 @@
 
 ## 모더레이터가 말하는 시점
 
-- 팀 채팅의 **Ask moderator** 버튼 → `trigger: "manual"`
-- 팀 메시지를 보낼 때마다 → `trigger: "message"`
-
-어느 쪽에 답할지는 `moderator.mjs` 의 `shouldModeratorSpeak()` 가 정합니다. 지금은 버튼을 눌렀을 때만 답합니다.
+팀 메시지가 올라올 때마다 서버가 `moderator.mjs` 의 `shouldModeratorSpeak({ team })` 를 호출하고,
+`true` 면 모더레이터가 답합니다. 기본값은 "사람이 보낸 메시지마다 답하기"이고, `false` 를 반환하면 조용히 있습니다.

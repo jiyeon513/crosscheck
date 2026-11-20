@@ -14,15 +14,17 @@ export const MODERATOR_USER = { id: "crosscheck-moderator", name: "Moderator" };
 const HISTORY_LIMIT = 80;
 
 /**
- * Decide whether the moderator should post right now.
+ * Called after every team message. Decide whether the moderator posts now.
  * TODO: replace with your own policy (e.g. every N messages, when the team
- * goes quiet, when a decision seems to be forming).
+ * goes quiet, when a decision seems to be forming). Return false to keep it silent.
  *
- * @param {{ trigger: "manual" | "message", team: Array<{ author: string, text: string }> }} input
+ * @param {{ team: Array<{ author: string, text: string, createdAt?: string }> }} input
+ *   the team chat, oldest first (the moderator's own posts have author "Moderator")
  */
-export function shouldModeratorSpeak({ trigger }) {
-  // For now the moderator only speaks when someone presses "Ask moderator".
-  return trigger === "manual";
+export function shouldModeratorSpeak({ team }) {
+  // Default: answer every message from a person, never its own post.
+  const last = team.at(-1);
+  return Boolean(last) && last.author !== MODERATOR_USER.name;
 }
 
 /**

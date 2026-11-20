@@ -75,7 +75,6 @@ export default function Room({
   const [dragging, setDragging] = useState<Source | null>(null);
   const [notice, setNotice] = useState("");
   const [agentThinking, setAgentThinking] = useState(false);
-  const [moderatorBusy, setModeratorBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [logOpen, setLogOpen] = useState(() => {
     try {
@@ -251,8 +250,8 @@ export default function Room({
         },
       });
       setNotice("");
-      // The moderator's shouldModeratorSpeak() policy decides whether to answer.
-      void callModerator("message");
+      // The server's shouldModeratorSpeak() policy decides whether the moderator answers.
+      void notifyModerator();
     } catch (caught) {
       setTeamDraft(text);
       setTeamQuote(quote);
@@ -321,17 +320,12 @@ export default function Room({
     rememberAgent([...withMine, reply]);
   }
 
-  async function callModerator(trigger: "manual" | "message") {
-    if (trigger === "manual") setModeratorBusy(true);
+  /** Runs after each team message; a moderator reply arrives through the normal chat sync. */
+  async function notifyModerator() {
     try {
-      await askModerator({ code: group.code, trigger, meeting: meetingRef });
-      if (trigger === "manual") setNotice("");
+      await askModerator({ code: group.code, meeting: meetingRef });
     } catch (caught) {
-      if (trigger === "manual") {
-        setNotice(caught instanceof Error ? caught.message : "The moderator did not answer.");
-      }
-    } finally {
-      if (trigger === "manual") setModeratorBusy(false);
+      console.warn("Moderator did not answer:", caught);
     }
   }
 
@@ -421,21 +415,7 @@ export default function Room({
               <h2>Team conversation</h2>
               <p>One ongoing chat across every meeting</p>
             </div>
-            <div className="head-actions">
-              <People people={people} />
-              <button
-                className="btn small moderator-btn"
-                type="button"
-                onClick={() => void callModerator("manual")}
-                disabled={!ready || moderatorBusy}
-                title="Ask the moderator agent to post in the team chat"
-              >
-                <span className="mod-mark" aria-hidden="true">
-                  ◆
-                </span>
-                {moderatorBusy ? "Thinking..." : "Ask moderator"}
-              </button>
-            </div>
+            <People people={people} />
           </header>
           <div className="thread">
             {timeline.length === 0 ? (

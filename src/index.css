@@ -1693,23 +1693,6 @@ button.schedule-row.past:hover {
 
 /* ---------- Agents ---------- */
 
-.moderator-btn {
-  border-color: var(--mod-line);
-  background: var(--mod-soft);
-  color: var(--mod);
-  font-size: 12px;
-  padding: 6px 10px;
-  white-space: nowrap;
-}
-
-.moderator-btn:hover:not(:disabled) {
-  background: #cff7fc;
-}
-
-.mod-mark {
-  font-size: 10px;
-}
-
 .mod-avatar {
   background: var(--mod);
   font-size: 11px;

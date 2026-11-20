@@ -51,11 +51,7 @@ export function askPersonalAgent(input: {
  * Moderator: the server reads the team chat itself and posts the reply there,
  * so it arrives for everyone through the normal chat sync.
  */
-export function askModerator(input: {
-  code: string;
-  trigger: "manual" | "message";
-  meeting: MeetingRef;
-}) {
+export function askModerator(input: { code: string; meeting: MeetingRef }) {
   return post<{ text?: string; skipped?: boolean }>("/api/agent/moderator", input);
 }
 

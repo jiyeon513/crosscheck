@@ -167,22 +167,16 @@ function readMeeting(value) {
 /**
  * Moderator turn. Reads the team chat from Stream itself (it never receives
  * personal chats), asks the model, and posts the reply into the team chat.
- * Body: { code, trigger: "manual" | "message", meeting? }
+ * Called by the client after each team message.
+ * Body: { code, meeting? }
  */
 async function handleModerator(body, res) {
   loadEnv();
   const code = channelIdFromCode(body.code);
-  const trigger = body.trigger === "message" ? "message" : "manual";
   if (!code) {
     send(res, 400, { error: "Missing group code." });
     return;
   }
-  // Cheap check first, so automatic triggers cost nothing when the policy says no.
-  if (!shouldModeratorSpeak({ trigger, team: [] })) {
-    send(res, 200, { skipped: true });
-    return;
-  }
-
   const client = getStream();
   const channel = client.chat.channel("messaging", code);
   const state = await channel.getOrCreate({ messages: { limit: 100 } });
@@ -198,7 +192,7 @@ async function handleModerator(body, res) {
       ...(message.custom?.quote?.text ? { quote: message.custom.quote } : {}),
     }));
 
-  if (!shouldModeratorSpeak({ trigger, team })) {
+  if (!shouldModeratorSpeak({ team })) {
     send(res, 200, { skipped: true });
     return;
   }
