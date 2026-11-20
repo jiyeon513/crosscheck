@@ -22,39 +22,6 @@ export async function joinGroup(input: {
   return body;
 }
 
-async function post<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
-  if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
-  return data;
-}
-
-type MeetingRef = { title: string; startsAt: string } | null;
-type QuoteRef = { author: string; text: string };
-
-/** Personal agent: sees the team chat and your private chat, answers only you. */
-export function askPersonalAgent(input: {
-  name: string;
-  groupTitle: string;
-  meeting: MeetingRef;
-  team: { author: string; text: string; createdAt: string; quote?: QuoteRef }[];
-  personal: { from: "user" | "agent"; text: string; quote?: QuoteRef }[];
-}) {
-  return post<{ text: string }>("/api/agent/personal", input);
-}
-
-/**
- * Moderator: the server reads the team chat itself and posts the reply there,
- * so it arrives for everyone through the normal chat sync.
- */
-export function askModerator(input: { code: string; meeting: MeetingRef }) {
-  return post<{ text?: string; skipped?: boolean }>("/api/agent/moderator", input);
-}
-
 export function Logo() {
   return (
     <div className="brand">

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import type { Channel } from "stream-chat";
 import { useCreateChatClient } from "stream-chat-react";
-import { Logo, askModerator, askPersonalAgent, type JoinResult, joinGroup } from "./api";
+import { Logo, type JoinResult, joinGroup } from "./api";
 import {
   agentThread,
   decisionsFor,
@@ -32,7 +32,7 @@ type Target = "team" | "agent" | "log";
 let carried: Carried | null = null;
 
 const LOG_OPEN_KEY = "crosscheck.logOpen";
-/** Stream user id the server posts moderator messages as (see agents/moderator.mjs). */
+/** Older team messages posted by the removed moderator agent. */
 const MODERATOR_ID = "crosscheck-moderator";
 
 type WireMessage = {
@@ -74,7 +74,6 @@ export default function Room({
   const [over, setOver] = useState<Target | null>(null);
   const [dragging, setDragging] = useState<Source | null>(null);
   const [notice, setNotice] = useState("");
-  const [agentThinking, setAgentThinking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [logOpen, setLogOpen] = useState(() => {
     try {
@@ -250,8 +249,6 @@ export default function Room({
         },
       });
       setNotice("");
-      // The server's shouldModeratorSpeak() policy decides whether the moderator answers.
-      void notifyModerator();
     } catch (caught) {
       setTeamDraft(text);
       setTeamQuote(quote);
@@ -259,14 +256,12 @@ export default function Room({
     }
   }
 
-  const meetingRef = current ? { title: current.title, startsAt: current.startsAt } : null;
-
-  async function sendAgent(event: FormEvent) {
+  function sendAgent(event: FormEvent) {
     event.preventDefault();
     const text = agentDraft.trim();
     const quote = agentQuote;
-    if ((!text && !quote) || agentThinking) return;
-    const withMine: AgentMessage[] = [
+    if (!text && !quote) return;
+    rememberAgent([
       ...agentMessages,
       {
         id: crypto.randomUUID(),
@@ -276,57 +271,9 @@ export default function Room({
         from: "user",
         ...(quote ? { quote } : {}),
       },
-    ];
+    ]);
     setAgentDraft("");
     setAgentQuote(null);
-    rememberAgent(withMine);
-    setAgentThinking(true);
-    let reply: AgentMessage;
-    try {
-      const result = await askPersonalAgent({
-        name: profile.name,
-        groupTitle: group.title,
-        meeting: meetingRef,
-        team: teamMessages.map(({ author, text, createdAt, quote }) => ({
-          author,
-          text,
-          createdAt,
-          ...(quote ? { quote } : {}),
-        })),
-        // Failed replies are local notices, not part of the conversation.
-        personal: withMine
-          .filter((message) => !message.failed)
-          .map(({ from, text, quote }) => ({ from, text, ...(quote ? { quote } : {}) })),
-      });
-      reply = {
-        id: crypto.randomUUID(),
-        label: "",
-        text: result.text,
-        createdAt: new Date().toISOString(),
-        from: "agent",
-      };
-    } catch (caught) {
-      reply = {
-        id: crypto.randomUUID(),
-        label: "Agent unavailable",
-        text: caught instanceof Error ? caught.message : "The personal agent did not answer.",
-        createdAt: new Date().toISOString(),
-        from: "agent",
-        failed: true,
-      };
-    } finally {
-      setAgentThinking(false);
-    }
-    rememberAgent([...withMine, reply]);
-  }
-
-  /** Runs after each team message; a moderator reply arrives through the normal chat sync. */
-  async function notifyModerator() {
-    try {
-      await askModerator({ code: group.code, meeting: meetingRef });
-    } catch (caught) {
-      console.warn("Moderator did not answer:", caught);
-    }
   }
 
   function dropZone(target: Target) {
@@ -546,13 +493,6 @@ export default function Room({
                 />
               ),
             )}
-            {agentThinking ? (
-              <div className="typing" aria-label="Personal agent is thinking">
-                <span />
-                <span />
-                <span />
-              </div>
-            ) : null}
             <div ref={agentEnd} />
           </div>
           <Composer

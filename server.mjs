@@ -2,9 +2,6 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { StreamClient } from "@stream-io/node-sdk";
-import { AgentConfigError } from "./agents/openrouter.mjs";
-import { MODERATOR_USER, runModerator, shouldModeratorSpeak } from "./agents/moderator.mjs";
-import { runPersonal } from "./agents/personal.mjs";
 
 const port = Number(process.env.PORT || 8787);
 
@@ -94,8 +91,6 @@ function getStream() {
 
 const routes = {
   "/api/join": handleJoin,
-  "/api/agent/moderator": handleModerator,
-  "/api/agent/personal": handlePersonal,
 };
 
 const server = createServer(async (req, res) => {
@@ -108,8 +103,7 @@ const server = createServer(async (req, res) => {
     await handler(await readJson(req), res);
   } catch (error) {
     console.error(error);
-    const status = error instanceof AgentConfigError ? error.status : 500;
-    send(res, status, { error: error instanceof Error ? error.message : "Request failed." });
+    send(res, 500, { error: error instanceof Error ? error.message : "Request failed." });
   }
 });
 
@@ -152,98 +146,6 @@ async function handleJoin(body, res) {
     code,
     title: channelTitle(created) || title || code.toUpperCase(),
   });
-}
-
-/** Short meeting info sent by the client: { title, startsAt } or null. */
-function readMeeting(value) {
-  if (!value || typeof value !== "object") return null;
-  const title = String(value.title ?? "")
-    .trim()
-    .slice(0, 80);
-  const startsAt = String(value.startsAt ?? "");
-  return title ? { title, startsAt } : null;
-}
-
-/**
- * Moderator turn. Reads the team chat from Stream itself (it never receives
- * personal chats), asks the model, and posts the reply into the team chat.
- * Called by the client after each team message.
- * Body: { code, meeting? }
- */
-async function handleModerator(body, res) {
-  loadEnv();
-  const code = channelIdFromCode(body.code);
-  if (!code) {
-    send(res, 400, { error: "Missing group code." });
-    return;
-  }
-  const client = getStream();
-  const channel = client.chat.channel("messaging", code);
-  const state = await channel.getOrCreate({ messages: { limit: 100 } });
-  const team = (state.messages ?? [])
-    .filter((message) => {
-      const kind = message.custom?.kind;
-      return message.text?.trim() && kind !== "decision" && kind !== "meeting";
-    })
-    .map((message) => ({
-      author: message.user?.name || message.user?.id || "Someone",
-      text: message.text.trim(),
-      createdAt: new Date(message.created_at).toISOString(),
-      ...(message.custom?.quote?.text ? { quote: message.custom.quote } : {}),
-    }));
-
-  if (!shouldModeratorSpeak({ team })) {
-    send(res, 200, { skipped: true });
-    return;
-  }
-
-  const text = await runModerator({
-    groupTitle: channelTitle(state) || code.toUpperCase(),
-    meeting: readMeeting(body.meeting),
-    team,
-  });
-
-  await client.upsertUsers([{ id: MODERATOR_USER.id, name: MODERATOR_USER.name }]);
-  await channel.update({ add_members: [{ user_id: MODERATOR_USER.id }] });
-  const sent = await channel.sendMessage({
-    message: { text, user_id: MODERATOR_USER.id, custom: { kind: "moderator" } },
-  });
-  send(res, 200, { text, id: sent.message?.id });
-}
-
-/**
- * Personal agent turn. Sees the team chat and the person's private chat (both
- * sent by the client) and only answers back to that person.
- * Body: { name, groupTitle, meeting?, team: [...], personal: [...] }
- */
-async function handlePersonal(body, res) {
-  loadEnv();
-  const owner = String(body.name ?? "")
-    .trim()
-    .slice(0, 40);
-  if (!owner) {
-    send(res, 400, { error: "Missing name." });
-    return;
-  }
-  const team = Array.isArray(body.team) ? body.team : [];
-  const personal = Array.isArray(body.personal) ? body.personal : [];
-  const text = await runPersonal({
-    owner,
-    groupTitle: String(body.groupTitle ?? "").slice(0, 80),
-    meeting: readMeeting(body.meeting),
-    team: team.map((message) => ({
-      author: String(message.author ?? "Someone"),
-      text: String(message.text ?? ""),
-      createdAt: message.createdAt,
-      ...(message.quote?.text ? { quote: message.quote } : {}),
-    })),
-    personal: personal.map((message) => ({
-      from: message.from === "agent" ? "agent" : "user",
-      text: String(message.text ?? ""),
-      ...(message.quote?.text ? { quote: message.quote } : {}),
-    })),
-  });
-  send(res, 200, { text });
 }
 
 server.listen(port, "127.0.0.1", () => {
