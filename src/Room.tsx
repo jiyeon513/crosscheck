@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import type { Channel } from "stream-chat";
 import { useCreateChatClient } from "stream-chat-react";
-import { Logo, type JoinResult, joinGroup } from "./api";
+import { Logo, askModerator, askPersonalAgent, type JoinResult, joinGroup } from "./api";
 import {
-  agentReply,
   agentThread,
   decisionsFor,
   demoMessagesFor,
@@ -33,6 +32,8 @@ type Target = "team" | "agent" | "log";
 let carried: Carried | null = null;
 
 const LOG_OPEN_KEY = "crosscheck.logOpen";
+/** Stream user id the server posts moderator messages as (see agents/moderator.mjs). */
+const MODERATOR_ID = "crosscheck-moderator";
 
 type WireMessage = {
   id?: string;
@@ -73,6 +74,8 @@ export default function Room({
   const [over, setOver] = useState<Target | null>(null);
   const [dragging, setDragging] = useState<Source | null>(null);
   const [notice, setNotice] = useState("");
+  const [agentThinking, setAgentThinking] = useState(false);
+  const [moderatorBusy, setModeratorBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [logOpen, setLogOpen] = useState(() => {
     try {
@@ -248,6 +251,8 @@ export default function Room({
         },
       });
       setNotice("");
+      // The moderator's shouldModeratorSpeak() policy decides whether to answer.
+      void callModerator("message");
     } catch (caught) {
       setTeamDraft(text);
       setTeamQuote(quote);
@@ -255,33 +260,79 @@ export default function Room({
     }
   }
 
-  function sendAgent(event: FormEvent) {
+  const meetingRef = current ? { title: current.title, startsAt: current.startsAt } : null;
+
+  async function sendAgent(event: FormEvent) {
     event.preventDefault();
     const text = agentDraft.trim();
     const quote = agentQuote;
-    if (!text && !quote) return;
-    const now = new Date().toISOString();
-    const next: AgentMessage[] = [
+    if ((!text && !quote) || agentThinking) return;
+    const withMine: AgentMessage[] = [
       ...agentMessages,
       {
         id: crypto.randomUUID(),
         label: "",
         text,
-        createdAt: now,
+        createdAt: new Date().toISOString(),
         from: "user",
         ...(quote ? { quote } : {}),
-      },
-      {
-        id: crypto.randomUUID(),
-        label: "From your note",
-        text: agentReply(profile.name, text || quote!.text, current),
-        createdAt: new Date(Date.now() + 1).toISOString(),
-        from: "agent",
       },
     ];
     setAgentDraft("");
     setAgentQuote(null);
-    rememberAgent(next);
+    rememberAgent(withMine);
+    setAgentThinking(true);
+    let reply: AgentMessage;
+    try {
+      const result = await askPersonalAgent({
+        name: profile.name,
+        groupTitle: group.title,
+        meeting: meetingRef,
+        team: teamMessages.map(({ author, text, createdAt, quote }) => ({
+          author,
+          text,
+          createdAt,
+          ...(quote ? { quote } : {}),
+        })),
+        // Failed replies are local notices, not part of the conversation.
+        personal: withMine
+          .filter((message) => !message.failed)
+          .map(({ from, text, quote }) => ({ from, text, ...(quote ? { quote } : {}) })),
+      });
+      reply = {
+        id: crypto.randomUUID(),
+        label: "",
+        text: result.text,
+        createdAt: new Date().toISOString(),
+        from: "agent",
+      };
+    } catch (caught) {
+      reply = {
+        id: crypto.randomUUID(),
+        label: "Agent unavailable",
+        text: caught instanceof Error ? caught.message : "The personal agent did not answer.",
+        createdAt: new Date().toISOString(),
+        from: "agent",
+        failed: true,
+      };
+    } finally {
+      setAgentThinking(false);
+    }
+    rememberAgent([...withMine, reply]);
+  }
+
+  async function callModerator(trigger: "manual" | "message") {
+    if (trigger === "manual") setModeratorBusy(true);
+    try {
+      await askModerator({ code: group.code, trigger, meeting: meetingRef });
+      if (trigger === "manual") setNotice("");
+    } catch (caught) {
+      if (trigger === "manual") {
+        setNotice(caught instanceof Error ? caught.message : "The moderator did not answer.");
+      }
+    } finally {
+      if (trigger === "manual") setModeratorBusy(false);
+    }
   }
 
   function dropZone(target: Target) {
@@ -370,7 +421,21 @@ export default function Room({
               <h2>Team conversation</h2>
               <p>One ongoing chat across every meeting</p>
             </div>
-            <People people={people} />
+            <div className="head-actions">
+              <People people={people} />
+              <button
+                className="btn small moderator-btn"
+                type="button"
+                onClick={() => void callModerator("manual")}
+                disabled={!ready || moderatorBusy}
+                title="Ask the moderator agent to post in the team chat"
+              >
+                <span className="mod-mark" aria-hidden="true">
+                  ◆
+                </span>
+                {moderatorBusy ? "Thinking..." : "Ask moderator"}
+              </button>
+            </div>
           </header>
           <div className="thread">
             {timeline.length === 0 ? (
@@ -397,6 +462,7 @@ export default function Room({
                     text={item.message.text}
                     quote={item.message.quote}
                     forwarded={item.message.forwarded}
+                    moderator={item.message.moderator}
                     {...dragProps}
                   />
                 ),
@@ -485,6 +551,7 @@ export default function Room({
                   author="Agent"
                   label={message.label}
                   text={message.text}
+                  failed={message.failed}
                   {...dragProps}
                 />
               ) : (
@@ -499,6 +566,13 @@ export default function Room({
                 />
               ),
             )}
+            {agentThinking ? (
+              <div className="typing" aria-label="Personal agent is thinking">
+                <span />
+                <span />
+                <span />
+              </div>
+            ) : null}
             <div ref={agentEnd} />
           </div>
           <Composer
@@ -688,6 +762,9 @@ function publish(
         author,
         createdAt,
         mine: message.user?.id === userId,
+        ...(message.custom?.kind === "moderator" || message.user?.id === MODERATOR_ID
+          ? { moderator: true }
+          : {}),
         ...(quote?.text ? { quote, forwarded: Boolean(message.custom?.forwarded) } : {}),
       });
     }
@@ -703,9 +780,13 @@ function Bubble({
   text,
   quote,
   forwarded = false,
+  moderator = false,
+  failed = false,
   onDragState,
 }: {
   from: Source;
+  moderator?: boolean;
+  failed?: boolean;
   mine?: boolean;
   author: string;
   label?: string;
@@ -726,7 +807,13 @@ function Bubble({
     onDragState(from);
   }
 
-  const className = ["bubble-row", from, mine ? "mine" : ""].join(" ");
+  const className = [
+    "bubble-row",
+    from,
+    mine ? "mine" : "",
+    moderator ? "moderator" : "",
+    failed ? "failed" : "",
+  ].join(" ");
 
   return (
     <article
@@ -740,9 +827,22 @@ function Bubble({
         }, 0);
       }}
     >
-      {from === "team" && !mine ? <Avatar name={author} /> : null}
+      {from === "team" && !mine ? (
+        moderator ? (
+          <span className="avatar mod-avatar" aria-hidden="true">
+            ◆
+          </span>
+        ) : (
+          <Avatar name={author} />
+        )
+      ) : null}
       <div className="bubble-col">
-        {from === "team" && !mine ? <p className="bubble-author">{author}</p> : null}
+        {from === "team" && !mine ? (
+          <p className="bubble-author">
+            {author}
+            {moderator ? <em className="ai-tag">AI</em> : null}
+          </p>
+        ) : null}
         <div className="bubble">
           <span className="grip" aria-hidden="true">
             ⋮⋮

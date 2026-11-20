@@ -35,6 +35,8 @@ export type TeamMessage = {
   mine?: boolean;
   quote?: Quote;
   forwarded?: boolean;
+  /** Set when the message was posted by the moderator agent. */
+  moderator?: boolean;
 };
 
 export type AgentMessage = {
@@ -44,6 +46,8 @@ export type AgentMessage = {
   createdAt: string;
   from: "user" | "agent";
   quote?: Quote;
+  /** The agent could not answer (e.g. OpenRouter not configured). */
+  failed?: boolean;
 };
 
 export type Decision = {
@@ -423,13 +427,6 @@ export function cleanCode(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, "")
     .slice(0, 40);
-}
-
-export function agentReply(name: string, text: string, meeting: Meeting | null) {
-  const line = text.trim().split("\n").find(Boolean) ?? text.trim();
-  const clipped = line.length > 160 ? `${line.slice(0, 157)}...` : line;
-  const where = meeting ? ` for ${meeting.title} (${formatMeetingTime(meeting.startsAt)})` : "";
-  return `Noted${where}, ${name}: "${clipped}"\nDrag a bubble into the team chat, or onto a meeting's decision log if the team should keep it.`;
 }
 
 export function formatMeetingTime(value: string) {
