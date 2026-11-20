@@ -98,7 +98,6 @@ const server = createServer(async (req, res) => {
   try {
     const body = await readJson(req);
     const name = String(body.name ?? "").trim();
-    const role = String(body.role ?? "").trim().slice(0, 40);
     const title = String(body.title ?? "").trim().slice(0, 80);
     const code = channelIdFromCode(body.code);
     if (!name || name.length > 40) {
@@ -112,9 +111,7 @@ const server = createServer(async (req, res) => {
 
     const userId = userIdFromName(name);
     const client = getStream();
-    await client.upsertUsers([
-      { id: userId, name, custom: role ? { team_role: role } : {} },
-    ]);
+    await client.upsertUsers([{ id: userId, name }]);
 
     const channel = client.chat.channel("messaging", code);
     const created = await channel.getOrCreate({

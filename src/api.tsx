@@ -9,7 +9,6 @@ export type JoinResult = {
 
 export async function joinGroup(input: {
   name: string;
-  role: string;
   code: string;
   title?: string;
 }): Promise<JoinResult> {
@@ -27,7 +26,7 @@ export function Logo() {
   return (
     <div className="brand">
       <span className="mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="18" height="18">
+        <svg viewBox="0 0 24 24" width="16" height="16">
           <path
             d="M6 12.5 10 16.5 18 8"
             fill="none"
@@ -38,7 +37,7 @@ export function Logo() {
           />
         </svg>
       </span>
-      <strong>CrossCheck.</strong>
+      <strong>CrossCheck</strong>
     </div>
   );
 }

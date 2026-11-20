@@ -1,174 +1,106 @@
-import { useState, type FormEvent } from "react";
-import {
-  cleanCode,
-  getCurrentGroup,
-  loadGroups,
-  loadProfile,
-  makeCode,
-  saveGroup,
-  saveProfile,
-  setCurrentGroup,
-  type Profile,
-} from "./model";
-import { Logo, joinGroup } from "./api";
+import { loadGroups, type Profile } from "./model";
+import { Logo } from "./api";
+import { Avatar } from "./ui";
 
-export default function Home({ onOpenGroups }: { onOpenGroups: () => void }) {
-  const existing = loadProfile();
-  const [profile, setProfile] = useState<Profile>({
-    name: existing?.name ?? "",
-    role: existing?.role ?? "",
-  });
-  const [title, setTitle] = useState("");
-  const [code, setCode] = useState("");
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState<"create" | "join" | null>(null);
-  const hasGroups = loadGroups().length > 0;
-
-  function remember(next: Profile) {
-    saveProfile(next);
-  }
-
-  async function createGroup(event: FormEvent) {
-    event.preventDefault();
-    const name = profile.name.trim();
-    const role = profile.role.trim();
-    const groupTitle = title.trim();
-    if (!name || !role || !groupTitle) return;
-    setError("");
-    setPending("create");
-    const nextCode = makeCode();
-    try {
-      const joined = await joinGroup({ name, role, code: nextCode, title: groupTitle });
-      remember({ name, role });
-      const now = new Date().toISOString();
-      saveGroup({
-        id: joined.code,
-        code: joined.code,
-        title: joined.title || groupTitle,
-        createdAt: now,
-        openedAt: now,
-      });
-      setCurrentGroup(joined.code);
-      onOpenGroups();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create the group.");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function joinWithCode(event: FormEvent) {
-    event.preventDefault();
-    const name = profile.name.trim();
-    const role = profile.role.trim();
-    const nextCode = cleanCode(code);
-    if (!name || !role || !nextCode) return;
-    setError("");
-    setPending("join");
-    try {
-      const joined = await joinGroup({ name, role, code: nextCode });
-      remember({ name, role });
-      const previous = loadGroups().find((group) => group.id === joined.code);
-      const now = new Date().toISOString();
-      saveGroup({
-        id: joined.code,
-        code: joined.code,
-        title: previous?.title || joined.title,
-        createdAt: previous?.createdAt ?? now,
-        openedAt: now,
-      });
-      setCurrentGroup(joined.code);
-      onOpenGroups();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not join the group.");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  const ready = profile.name.trim().length > 0 && profile.role.trim().length > 0;
-  const current = getCurrentGroup();
+export default function Home({
+  profile,
+  onCreate,
+  onJoin,
+  onOpen,
+  onShowCode,
+  onLogout,
+}: {
+  profile: Profile;
+  onCreate: () => void;
+  onJoin: () => void;
+  onOpen: (groupId: string) => void;
+  onShowCode: (groupId: string) => void;
+  onLogout: () => void;
+}) {
+  const groups = loadGroups();
 
   return (
-    <main className="screen">
+    <main className="screen scroll">
       <header className="app-header">
         <Logo />
-      </header>
-      <section className="home">
-        <div className="home-copy">
-          <h1>Start a group, or come back to one.</h1>
-          <p>
-            Create a room for this project, or enter with a code. Groups you have already
-            joined stay in the list.
-          </p>
-        </div>
-        <div className="identity">
-          <label>
-            Your name
-            <input
-              value={profile.name}
-              onChange={(event) => setProfile({ ...profile, name: event.target.value })}
-              maxLength={40}
-              required
-            />
-          </label>
-          <label>
-            Role
-            <input
-              value={profile.role}
-              onChange={(event) => setProfile({ ...profile, role: event.target.value })}
-              placeholder="UI/UX design"
-              maxLength={40}
-              required
-            />
-          </label>
-        </div>
-        <div className="split">
-          <form className="panel-card" onSubmit={createGroup}>
-            <h2>New group</h2>
-            <p>A code is created for the rest of the team.</p>
-            <label>
-              Group name
-              <input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="CS473 · Prototype meeting"
-                maxLength={80}
-              />
-            </label>
-            <button type="submit" disabled={!ready || title.trim().length === 0 || pending !== null}>
-              {pending === "create" ? "Creating..." : "Create group"}
-            </button>
-          </form>
-          <form className="panel-card" onSubmit={joinWithCode}>
-            <h2>Join with a code</h2>
-            <p>Use the code someone in the group shares with you.</p>
-            <label>
-              Group code
-              <input
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-                placeholder="cs473"
-                maxLength={40}
-                autoCapitalize="none"
-              />
-            </label>
-            <button
-              className="secondary"
-              type="submit"
-              disabled={!ready || cleanCode(code).length === 0 || pending !== null}
-            >
-              {pending === "join" ? "Joining..." : "Join group"}
-            </button>
-          </form>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-        {hasGroups ? (
-          <button className="text-link" type="button" onClick={onOpenGroups}>
-            {current ? "Back to your groups" : "Your groups"}
+        <div className="header-actions">
+          <span className="me">
+            <Avatar name={profile.name} />
+            {profile.name}
+          </span>
+          <button className="btn ghost small" type="button" onClick={onLogout}>
+            Log out
           </button>
-        ) : null}
+        </div>
+      </header>
+      <section className="page">
+        <div className="page-copy">
+          <h1>Hi {profile.name}, what's next?</h1>
+          <p>Start a new chat for your team, or join one with an invitation code.</p>
+        </div>
+
+        <div className="choices">
+          <button className="choice create" type="button" onClick={onCreate}>
+            <span className="choice-icon" aria-hidden="true">
+              +
+            </span>
+            <span className="choice-body">
+              <strong>Create a chat</strong>
+              <span>Name it and get an invitation code to share.</span>
+            </span>
+            <span className="choice-arrow" aria-hidden="true">
+              →
+            </span>
+          </button>
+          <button className="choice join" type="button" onClick={onJoin}>
+            <span className="choice-icon" aria-hidden="true">
+              #
+            </span>
+            <span className="choice-body">
+              <strong>Join a chat</strong>
+              <span>Enter the code someone on your team sent you.</span>
+            </span>
+            <span className="choice-arrow" aria-hidden="true">
+              →
+            </span>
+          </button>
+        </div>
+
+        <section className="group-section">
+          <h2>Your chats</h2>
+          {groups.length === 0 ? (
+            <p className="muted">Chats you create or join will show up here.</p>
+          ) : (
+            <div className="group-list">
+              {groups.map((group) => (
+                <article className="group-card" key={group.id}>
+                  <button className="group-open" type="button" onClick={() => onOpen(group.id)}>
+                    <span className="group-initial" aria-hidden="true">
+                      {group.title.trim().charAt(0).toUpperCase() || "#"}
+                    </span>
+                    <span className="group-text">
+                      <strong>{group.title}</strong>
+                      <span>Last opened {formatDate(group.openedAt)}</span>
+                    </span>
+                  </button>
+                  <button
+                    className="code-chip"
+                    type="button"
+                    onClick={() => onShowCode(group.id)}
+                    title="Show invitation code"
+                  >
+                    {group.code.toUpperCase()}
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </section>
     </main>
   );
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
