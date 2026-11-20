@@ -9,9 +9,8 @@ import {
   demoMessagesFor,
   formatMeetingTime,
   markOpened,
-  meetingStatus,
   meetingsFor,
-  pickActiveMeeting,
+  currentMeeting,
   saveAgentThread,
   saveDecisions,
   saveMeetings,
@@ -25,12 +24,11 @@ import {
   type TeamMessage,
 } from "./model";
 import { Avatar } from "./ui";
-import MeetingsPanel, { LOOSE } from "./Meetings";
+import CurrentLog from "./Meetings";
 
 type Source = "team" | "agent" | "user";
 type Carried = { from: Source | ""; author: string; text: string };
-/** "team", "agent", "log:" (the selected meeting) or "log:<meetingId>". */
-type Target = string;
+type Target = "team" | "agent" | "log";
 
 let carried: Carried | null = null;
 
@@ -72,9 +70,6 @@ export default function Room({
   const [agentDraft, setAgentDraft] = useState("");
   const [agentQuote, setAgentQuote] = useState<Quote | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>(() => meetingsFor(group.id));
-  const [activeId, setActiveId] = useState<string | null>(
-    () => pickActiveMeeting(meetingsFor(group.id))?.id ?? null,
-  );
   const [over, setOver] = useState<Target | null>(null);
   const [dragging, setDragging] = useState<Source | null>(null);
   const [notice, setNotice] = useState("");
@@ -151,13 +146,10 @@ export default function Room({
     saveAgentThread(group.id, profile.name, next);
   }
 
-  /** Where a drop on the panel itself (not a specific meeting) should go. */
-  function defaultMeetingId() {
-    if (activeId !== null) return activeId;
-    return pickActiveMeeting(meetings)?.id ?? LOOSE;
-  }
+  const current = currentMeeting(meetings);
 
-  async function recordDecision(meetingId: string, text: string) {
+  async function recordDecision(text: string) {
+    const meetingId = current?.id ?? "";
     const trimmed = text.trim();
     if (!trimmed) return;
     const entry: Decision = {
@@ -169,7 +161,6 @@ export default function Room({
       createdAt: new Date().toISOString(),
     };
     rememberDecisions([...decisions.filter((item) => item.id !== entry.id), entry]);
-    setActiveId(meetingId);
     if (!logOpen) {
       setFlash(true);
       setTimeout(() => setFlash(false), 900);
@@ -202,26 +193,43 @@ export default function Room({
     const next = sortMeetings([...meetings, meeting]);
     setMeetings(next);
     saveMeetings(group.id, next);
-    setActiveId(meeting.id);
+    await shareMeeting(meeting);
+  }
+
+  async function shareMeeting(meeting: Meeting) {
     const channel = channelRef.current;
-    if (!channel) return;
+    if (!channel) return false;
+    const { pendingShare: _pending, ...shared } = meeting;
+    const { title, startsAt } = meeting;
     try {
       await channel.sendMessage({
         message: {
           id: meeting.id,
           text: `Scheduled ${title} · ${formatMeetingTime(startsAt)}`,
-          custom: { kind: "meeting", meeting },
+          custom: { kind: "meeting", meeting: shared },
         },
       });
       setNotice("");
+      return true;
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : "Saved on this device only.");
+      return false;
     }
   }
 
-  function openMeeting(id: string) {
-    setActiveId(id);
-    if (!logOpen) toggleLog();
+  /** Meetings scheduled from the group page are announced once the room is connected. */
+  async function sharePending() {
+    const pending = meetingsFor(group.id).filter((item) => item.pendingShare);
+    if (pending.length === 0) return;
+    const sent = new Set<string>();
+    for (const meeting of pending) {
+      if (await shareMeeting(meeting)) sent.add(meeting.id);
+    }
+    const next = meetingsFor(group.id).map((item) =>
+      sent.has(item.id) ? { ...item, pendingShare: false } : item,
+    );
+    saveMeetings(group.id, next);
+    setMeetings(next);
   }
 
   async function sendTeam(event: FormEvent) {
@@ -266,11 +274,7 @@ export default function Room({
       {
         id: crypto.randomUUID(),
         label: "From your note",
-        text: agentReply(
-          profile.name,
-          text || quote!.text,
-          meetings.find((item) => item.id === defaultMeetingId()) ?? null,
-        ),
+        text: agentReply(profile.name, text || quote!.text, current),
         createdAt: new Date(Date.now() + 1).toISOString(),
         from: "agent",
       },
@@ -305,9 +309,8 @@ export default function Room({
     setDragging(null);
     carried = null;
     if (!payload) return;
-    if (target.startsWith("log:")) {
-      const meetingId = target === "log:" ? defaultMeetingId() : target.slice(4);
-      void recordDecision(meetingId, payload.text);
+    if (target === "log") {
+      void recordDecision(payload.text);
       return;
     }
     const quote = { author: payload.author, text: payload.text };
@@ -326,9 +329,6 @@ export default function Room({
   }
 
   const now = new Date();
-  const upcoming = meetings.find(
-    (item) => meetingStatus(item, now) !== "past" && new Date(item.startsAt) > now,
-  );
   const timeline = buildTimeline(teamMessages, meetings, now);
   const dragProps = {
     onDragState: (from: Source | null) => {
@@ -342,7 +342,7 @@ export default function Room({
     <main className={dragging ? "screen room-screen is-dragging" : "screen room-screen"}>
       <header className="app-header room-header">
         <div className="header-title">
-          <button className="icon-btn" type="button" onClick={onBack} aria-label="Back to home">
+          <button className="icon-btn" type="button" onClick={onBack} aria-label="Back to group">
             ←
           </button>
           <Logo />
@@ -372,34 +372,22 @@ export default function Room({
             </div>
             <People people={people} />
           </header>
-          {upcoming ? (
-            <button className="next-meeting" type="button" onClick={() => openMeeting(upcoming.id)}>
-              <span className="next-dot" aria-hidden="true" />
-              <span>
-                Next: <strong>{upcoming.title}</strong> · {formatWhen(upcoming.startsAt)}
-              </span>
-              <span className="next-link">Decision log ›</span>
-            </button>
-          ) : null}
           <div className="thread">
             {timeline.length === 0 ? (
               <p className="empty">Say hello to the team.</p>
             ) : (
               timeline.map((item) =>
                 item.kind === "meeting" ? (
-                  <button
+                  <div
                     key={`m-${item.meeting.id}`}
                     className={
-                      activeId === item.meeting.id ? "meeting-divider on" : "meeting-divider"
+                      current?.id === item.meeting.id ? "meeting-divider on" : "meeting-divider"
                     }
-                    type="button"
-                    onClick={() => openMeeting(item.meeting.id)}
-                    title="Open this meeting's decision log"
                   >
                     <span>
                       {item.meeting.title} · {formatMeetingTime(item.meeting.startsAt)}
                     </span>
-                  </button>
+                  </div>
                 ) : (
                   <Bubble
                     key={item.message.id}
@@ -424,6 +412,7 @@ export default function Room({
               onChannel={(channel) => {
                 channelRef.current = channel;
                 setReady(true);
+                void sharePending();
               }}
               onWire={(chat, liveDecisions, liveMeetings) => {
                 setLiveChat(chat);
@@ -461,17 +450,16 @@ export default function Room({
           />
         </section>
 
-        <MeetingsPanel
-          meetings={meetings}
-          decisions={decisions}
-          activeId={activeId}
-          onSelect={setActiveId}
+        <CurrentLog
+          meeting={current}
+          decisions={decisions.filter((item) => current && item.meetingId === current.id)}
           open={logOpen}
           onToggle={toggleLog}
+          onRecord={(text) => void recordDecision(text)}
           onSchedule={(title, startsAt) => void scheduleMeeting(title, startsAt)}
-          onRecord={(meetingId, text) => void recordDecision(meetingId, text)}
-          zone={dropZone}
-          over={over}
+          onOpenGroup={onBack}
+          zone={dropZone("log")}
+          over={over === "log"}
           dragging={dragging !== null}
           flash={flash}
         />
@@ -860,15 +848,4 @@ function toIso(value: unknown) {
     return new Date(millis).toISOString();
   }
   return new Date().toISOString();
-}
-
-function formatWhen(value: string) {
-  const date = new Date(value);
-  const day = date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  return `${day}, ${time}`;
 }

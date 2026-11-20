@@ -1,4 +1,11 @@
-import { formatMeetingTime, loadGroups, meetingsFor, nextMeeting, type Profile } from "./model";
+import {
+  formatMeetingTime,
+  loadGroups,
+  meetingStatus,
+  meetingsFor,
+  nextMeeting,
+  type Profile,
+} from "./model";
 import { Logo } from "./api";
 import { Avatar } from "./ui";
 
@@ -77,7 +84,9 @@ export default function Home({
             <div className="group-list">
               {groups.map((group) => {
                 const next = nextMeeting(group.id);
-                const count = meetingsFor(group.id).length;
+                const all = meetingsFor(group.id);
+                const done = all.filter((item) => meetingStatus(item) === "past").length;
+                const ahead = all.length - done;
                 return (
                   <article className="group-card" key={group.id}>
                     <button className="group-open" type="button" onClick={() => onOpen(group.id)}>
@@ -89,10 +98,12 @@ export default function Home({
                         <span>
                           {next
                             ? `Next: ${next.title} · ${formatMeetingTime(next.startsAt)}`
-                            : count
-                              ? `${count} meeting${count === 1 ? "" : "s"} · last opened ${formatDate(group.openedAt)}`
-                              : `No meetings yet · last opened ${formatDate(group.openedAt)}`}
+                            : `No upcoming meeting · last opened ${formatDate(group.openedAt)}`}
                         </span>
+                      </span>
+                      <span className="group-stats" aria-label={`${done} done, ${ahead} upcoming`}>
+                        <em className="badge past">✓ {done} done</em>
+                        <em className={ahead ? "badge upcoming" : "badge"}>{ahead} upcoming</em>
                       </span>
                     </button>
                     <button

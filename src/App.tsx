@@ -4,12 +4,14 @@ import Login from "./Login";
 import Home from "./Home";
 import { CreateChat, InviteCode, JoinChat } from "./Start";
 import Room from "./Room";
+import GroupPage from "./Group";
 
 type Route =
   | { screen: "home" }
   | { screen: "create" }
   | { screen: "join" }
   | { screen: "invite"; groupId: string }
+  | { screen: "group"; groupId: string }
   | { screen: "room"; groupId: string };
 
 export default function App() {
@@ -47,7 +49,7 @@ export default function App() {
         <JoinChat
           profile={profile}
           onBack={home}
-          onJoined={(groupId) => setRoute({ screen: "room", groupId })}
+          onJoined={(groupId) => setRoute({ screen: "group", groupId })}
         />
       );
     case "invite": {
@@ -57,14 +59,32 @@ export default function App() {
         <InviteCode
           group={group}
           onBack={home}
-          onEnter={() => setRoute({ screen: "room", groupId: group.id })}
+          onEnter={() => setRoute({ screen: "group", groupId: group.id })}
         />
       );
     }
     case "room": {
       const group = getGroup(route.groupId);
       if (!group) break;
-      return <Room group={group} profile={profile} onBack={home} />;
+      return (
+        <Room
+          group={group}
+          profile={profile}
+          onBack={() => setRoute({ screen: "group", groupId: group.id })}
+        />
+      );
+    }
+    case "group": {
+      const group = getGroup(route.groupId);
+      if (!group) break;
+      return (
+        <GroupPage
+          group={group}
+          profile={profile}
+          onBack={home}
+          onOpenChat={() => setRoute({ screen: "room", groupId: group.id })}
+        />
+      );
     }
   }
 
@@ -73,7 +93,7 @@ export default function App() {
       profile={profile}
       onCreate={() => setRoute({ screen: "create" })}
       onJoin={() => setRoute({ screen: "join" })}
-      onOpen={(groupId) => setRoute({ screen: "room", groupId })}
+      onOpen={(groupId) => setRoute({ screen: "group", groupId })}
       onShowCode={(groupId) => setRoute({ screen: "invite", groupId })}
       onLogout={signOut}
     />

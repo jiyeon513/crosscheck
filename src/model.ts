@@ -22,6 +22,8 @@ export type Meeting = {
   startsAt: string;
   createdBy: string;
   createdAt: string;
+  /** Scheduled outside the chat room; announce it to the team on the next connection. */
+  pendingShare?: boolean;
 };
 
 export type TeamMessage = {
@@ -358,15 +360,20 @@ export function meetingStatus(meeting: Meeting, now = new Date()): MeetingStatus
   return start < now ? "past" : "upcoming";
 }
 
-/** The meeting decisions should land in by default: today's, else the next one, else the latest. */
-export function pickActiveMeeting(meetings: Meeting[], now = new Date()): Meeting | null {
+/** The meeting the chat room is working on: today's, else the next upcoming one. */
+export function currentMeeting(meetings: Meeting[], now = new Date()): Meeting | null {
   const sorted = sortMeetings(meetings);
   return (
     sorted.find((item) => meetingStatus(item, now) === "today") ??
     sorted.find((item) => meetingStatus(item, now) === "upcoming") ??
-    sorted.at(-1) ??
     null
   );
+}
+
+export function addMeeting(meeting: Meeting) {
+  const store = loadStore();
+  store.meetings = [...store.meetings.filter((item) => item.id !== meeting.id), meeting];
+  saveStore(store);
 }
 
 export function nextMeeting(groupId: string, now = new Date()): Meeting | null {

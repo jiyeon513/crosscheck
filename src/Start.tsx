@@ -11,13 +11,7 @@ import {
 } from "./model";
 import { BackButton } from "./ui";
 
-function StartLayout({
-  onBack,
-  children,
-}: {
-  onBack: () => void;
-  children: ReactNode;
-}) {
+function StartLayout({ onBack, children }: { onBack: () => void; children: ReactNode }) {
   return (
     <main className="screen scroll">
       <header className="app-header">
@@ -74,7 +68,10 @@ export function CreateChat({
           +
         </span>
         <h1>Create a group</h1>
-        <p className="muted">One group per team project. You'll schedule meetings inside it and get an invitation code next.</p>
+        <p className="muted">
+          One group per team project. You'll schedule meetings inside it and get an invitation code
+          next.
+        </p>
         <label>
           Group name
           <input
