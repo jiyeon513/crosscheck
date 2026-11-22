@@ -1,0 +1,35 @@
+{
+  "name": "Four students choose a team project topic",
+  "goal": "Pick one topic for our social computing team project",
+  "host": "Minsu",
+  "participants": ["Minsu", "Seoyeon", "Jiwoo", "Taeho"],
+  "steps": [
+    { "title": "TASK 1 · Jiwoo thinks with her agent before speaking", "do": "private", "user": "Jiwoo", "text": "We need to pick a topic for our social computing team project. I'm interested in campus life problems. Help me think." },
+    { "do": "private", "user": "Jiwoo", "text": "Predicting crowding in the cafeteria and library sounds good, but can we get the data? Keep it in mind for now, I'm not sure it's a good idea yet." },
+    { "do": "private", "user": "Taeho", "text": "Is there any public campus data we could use? I heard the Wi-Fi access counts for every building are public on the campus portal. Remember that." },
+
+    { "title": "Two members post ideas. Jiwoo and Taeho stay quiet.", "do": "group", "user": "Minsu", "text": "How about a study group matching app?" },
+    { "do": "group", "user": "Seoyeon", "text": "A chatbot for club recruiting could work too." },
+    { "do": "private", "user": "Jiwoo", "text": "What are they talking about right now?" },
+
+    { "title": "TASK 2 · The chat is silent for a minute. The moderator looks for a missing angle.", "do": "wait", "seconds": 65 },
+    { "do": "share", "user": "Jiwoo", "after": 40, "fallback": "What about predicting how crowded the cafeteria and library are, so people can avoid peak times?" },
+    { "do": "share", "user": "Taeho", "after": 10, "fallback": "Wi-Fi access counts could measure how crowded a place is. I heard they are public on the campus portal." },
+
+    { "title": "TASK 3 · Someone proposes to decide. The moderator opens a private agreement check.", "do": "group", "user": "Minsu", "text": "Nice. Let's go with crowding prediction then, using campus data." },
+    { "do": "private", "user": "Seoyeon", "text": "Something about this bothers me, but I can't tell what." },
+    { "do": "private", "user": "Seoyeon", "text": "The scope. The whole campus is too big for one semester. But everyone seems to like it, so it's hard to say." },
+    { "do": "concern", "user": "Seoyeon", "mode": "anonymous" },
+    { "do": "answer", "user": "Minsu", "prefer": "whole" },
+    { "do": "answer", "user": "Taeho", "prefer": "whole" },
+    { "do": "answer", "user": "Seoyeon", "prefer": "library" },
+    { "do": "answer", "user": "Jiwoo", "prefer": "library" },
+
+    { "title": "The team talks it through, decides again, and everyone confirms.", "do": "group", "user": "Taeho", "text": "Thinking about it, cleaning the data for the whole campus would take forever." },
+    { "do": "revise", "user": "Minsu", "text": "Pilot the project in the library and the cafeteria." },
+    { "do": "answer", "user": "Minsu", "prefer": "library" },
+    { "do": "answer", "user": "Taeho", "prefer": "library" },
+    { "do": "answer", "user": "Seoyeon", "prefer": "library" },
+    { "do": "answer", "user": "Jiwoo", "prefer": "library" }
+  ]
+}

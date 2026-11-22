@@ -39,16 +39,6 @@ export type TeamMessage = {
   moderator?: boolean;
 };
 
-export type AgentMessage = {
-  id: string;
-  label: string;
-  text: string;
-  createdAt: string;
-  from: "user" | "agent";
-  quote?: Quote;
-  /** The agent could not answer (e.g. OpenRouter not configured). */
-  failed?: boolean;
-};
 
 export type Decision = {
   id: string;
@@ -66,7 +56,7 @@ type Store = {
   meetings: Meeting[];
   decisions: Decision[];
   demoMessages: TeamMessage[];
-  agent: Record<string, AgentMessage[]>;
+  agent: Record<string, unknown>;
 };
 
 const STORE_VERSION = 2;
@@ -202,27 +192,6 @@ const SEED_DECISIONS: Decision[] = [
     createdAt: at(2026, 10, 18, 11, 30),
   },
 ];
-
-const SEED_AGENT: Record<string, AgentMessage[]> = {
-  cs473: [
-    {
-      id: "agent-cs473",
-      label: "Carried over from earlier meetings",
-      text: "Prototype meeting (Nov 10): clickable Figma flow first, then coding.\nUser testing (Nov 15): move the back button to the top-left.\nNext up is the Final review.",
-      createdAt: at(2026, 11, 16, 9, 40),
-      from: "agent",
-    },
-  ],
-  hci201: [
-    {
-      id: "agent-hci201",
-      label: "From last time",
-      text: "The group paused interviews until the prototype could be clicked through.",
-      createdAt: at(2026, 10, 20, 9),
-      from: "agent",
-    },
-  ],
-};
 
 function emptyStore(): Store {
   return {
@@ -400,19 +369,6 @@ export function demoMessagesFor(groupId: string): TeamMessage[] {
   return loadStore()
     .demoMessages.filter((message) => message.groupId === groupId)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-}
-
-export function agentThread(groupId: string, name: string): AgentMessage[] {
-  const store = loadStore();
-  const key = `${groupId}::${name}`;
-  if (store.agent[key]?.length) return store.agent[key];
-  return SEED_AGENT[groupId] ?? [];
-}
-
-export function saveAgentThread(groupId: string, name: string, messages: AgentMessage[]) {
-  const store = loadStore();
-  store.agent[`${groupId}::${name}`] = messages;
-  saveStore(store);
 }
 
 export function makeCode() {

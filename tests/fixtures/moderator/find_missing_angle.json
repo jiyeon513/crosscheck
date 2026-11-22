@@ -1,0 +1,156 @@
+[
+  {
+    "id": "angle_similar_ideas",
+    "fn": "moderator.findMissingAngle",
+    "note": "Two ideas, both about connecting people. A different angle should be asked.",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "anglesAsked": [],
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "How about a study group matching app?"
+        },
+        {
+          "author": "Seoyeon",
+          "text": "A chatbot for club recruiting could work too."
+        }
+      ]
+    },
+    "expect": {
+      "action": "ask_angle",
+      "angle": {
+        "not_empty": true,
+        "max_words": 8,
+        "not_includes_any": [
+          "minsu",
+          "seoyeon"
+        ]
+      },
+      "group_prompt": {
+        "not_empty": true,
+        "not_includes_any": [
+          "minsu",
+          "seoyeon"
+        ]
+      }
+    }
+  },
+  {
+    "id": "angle_varied_ideas",
+    "fn": "moderator.findMissingAngle",
+    "note": "Ideas already differ in user, data, and method. Stay silent.",
+    "mock": "skip",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "anglesAsked": [],
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "How about a study group matching app for freshmen?"
+        },
+        {
+          "author": "Jiwoo",
+          "text": "Or predict cafeteria crowding from the public Wi-Fi access data."
+        },
+        {
+          "author": "Taeho",
+          "text": "We could also run a survey with exchange students about finding housing and build from that."
+        },
+        {
+          "author": "Seoyeon",
+          "text": "I like that these are so different. A moderation bot for the anonymous campus forum is another one."
+        }
+      ]
+    },
+    "expect": {
+      "action": "none"
+    }
+  },
+  {
+    "id": "angle_one_idea_only",
+    "fn": "moderator.findMissingAngle",
+    "note": "Only one idea so far. Too early to ask.",
+    "mock": "skip",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "anglesAsked": [],
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "hi everyone"
+        },
+        {
+          "author": "Seoyeon",
+          "text": "hi! so, a chatbot for club recruiting?"
+        }
+      ]
+    },
+    "expect": {
+      "action": "none"
+    }
+  },
+  {
+    "id": "angle_already_asked",
+    "fn": "moderator.findMissingAngle",
+    "note": "The data angle was asked before. It must not be asked again.",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "anglesAsked": [
+        "using real campus data"
+      ],
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "How about a study group matching app?"
+        },
+        {
+          "author": "Seoyeon",
+          "text": "A chatbot for club recruiting could work too."
+        }
+      ]
+    },
+    "expect": {
+      "angle": {
+        "not_includes_any": [
+          "campus data"
+        ]
+      }
+    }
+  },
+  {
+    "id": "angle_team_converging",
+    "fn": "moderator.findMissingAngle",
+    "note": "The team is already agreeing on one idea. Do not interrupt with a new angle.",
+    "mock": "skip",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "anglesAsked": [],
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "How about a study group matching app?"
+        },
+        {
+          "author": "Jiwoo",
+          "text": "What about predicting how crowded the cafeteria and library are?"
+        },
+        {
+          "author": "Taeho",
+          "text": "Wi-Fi access counts could measure that, they are public."
+        },
+        {
+          "author": "Minsu",
+          "text": "Oh nice, I like the crowding one more than mine."
+        },
+        {
+          "author": "Seoyeon",
+          "text": "Same, crowding sounds good to me."
+        }
+      ]
+    },
+    "expect": {
+      "action": "none"
+    }
+  }
+]
