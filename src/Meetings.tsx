@@ -6,6 +6,9 @@ import {
   type Meeting,
   type MeetingStatus,
 } from "./model";
+import type { RoomView } from "./api";
+
+type Agreement = NonNullable<RoomView["agreement"]>;
 
 export type Zone = {
   onDragOver: (event: DragEvent) => void;
@@ -26,6 +29,9 @@ export default function CurrentLog({
   over,
   dragging,
   flash,
+  agreement,
+  isHost,
+  act,
 }: {
   meeting: Meeting | null;
   decisions: Decision[];
@@ -38,6 +44,9 @@ export default function CurrentLog({
   over: boolean;
   dragging: boolean;
   flash: boolean;
+  agreement: Agreement | null;
+  isHost: boolean;
+  act: (action: string, body: object) => Promise<void>;
 }) {
   const [draft, setDraft] = useState("");
   const [scheduling, setScheduling] = useState(false);
@@ -113,6 +122,8 @@ export default function CurrentLog({
         </div>
       ) : null}
 
+      {agreement ? <AgreementBox agreement={agreement} isHost={isHost} act={act} /> : null}
+
       <div className="thread">
         {!meeting && !scheduling ? (
           <div className="empty">
@@ -159,6 +170,107 @@ export default function CurrentLog({
       </button>
       <DropOverlay label={dropLabel} />
     </section>
+  );
+}
+
+/** The moderator's agreement check, as everyone sees it. Who answered what is never shown. */
+function AgreementBox({
+  agreement,
+  isHost,
+  act,
+}: {
+  agreement: Agreement;
+  isHost: boolean;
+  act: (action: string, body: object) => Promise<void>;
+}) {
+  const [revising, setRevising] = useState(false);
+  const [revision, setRevision] = useState(agreement.decision);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const { status, answered, askedOf, approvedCount } = agreement;
+
+  async function run(action: string, body: object) {
+    setBusy(true);
+    setError("");
+    try {
+      await act(action, body);
+      setRevising(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That did not work.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const title =
+    status === "collecting"
+      ? "Checking agreement"
+      : status === "aligned"
+        ? `Agreed ${agreement.agreed ?? approvedCount}/${agreement.total ?? askedOf}`
+        : `Not aligned yet · approved ${agreement.agreed ?? approvedCount}/${agreement.total ?? askedOf}`;
+
+  return (
+    <div className={`agreement ${status}`}>
+      <p className="agreement-title">
+        <span className="agreement-dot" aria-hidden="true" />
+        {title}
+        {agreement.version > 1 ? <em> · v{agreement.version}</em> : null}
+      </p>
+      <p className="agreement-decision">{agreement.decision}</p>
+      {status === "collecting" ? (
+        <>
+          <div className="agreement-meter" aria-label={`${answered} of ${askedOf} answered`}>
+            <span style={{ width: `${askedOf ? (answered / askedOf) * 100 : 0}%` }} />
+          </div>
+          <p className="agreement-meta">
+            {answered}/{askedOf} answered privately · {approvedCount} approved
+          </p>
+        </>
+      ) : status === "mismatch" ? (
+        <p className="agreement-meta">The moderator asked the team one anonymous question in the chat.</p>
+      ) : null}
+
+      {isHost && status !== "aligned" ? (
+        revising ? (
+          <div className="agreement-revise">
+            <input value={revision} onChange={(event) => setRevision(event.target.value)} aria-label="Revised proposal" />
+            <div className="schedule-actions">
+              <button className="btn ghost small" type="button" onClick={() => setRevising(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn primary small"
+                type="button"
+                disabled={busy || !revision.trim() || revision.trim() === agreement.decision}
+                onClick={() => run("check/revise", { checkId: agreement.checkId, decision: revision })}
+              >
+                Ask again
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="agreement-host">
+            <span>Host</span>
+            {status === "collecting" && answered >= 2 && answered < askedOf ? (
+              <button className="btn ghost small" type="button" disabled={busy} onClick={() => run("check/compare", {})}>
+                Compare now
+              </button>
+            ) : null}
+            <button
+              className="btn ghost small"
+              type="button"
+              onClick={() => {
+                setRevision(agreement.decision);
+                setRevising(true);
+              }}
+            >
+              Revise proposal
+            </button>
+          </div>
+        )
+      ) : null}
+      {error ? <p className="error small-note">{error}</p> : null}
+    </div>
   );
 }
 

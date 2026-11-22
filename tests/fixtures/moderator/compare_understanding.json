@@ -1,0 +1,80 @@
+[
+  {
+    "id": "compare_all_same",
+    "fn": "moderator.compareUnderstanding",
+    "note": "Everyone picked the same option. No question to the group.",
+    "input": {
+      "decision": "We will do crowding prediction using campus data.",
+      "question": "What scope do you have in mind for this?",
+      "labels": ["Library and cafeteria only", "Library and cafeteria only", "Library and cafeteria only", "Library and cafeteria only"],
+      "concerns": []
+    },
+    "expect": {
+      "aligned": true,
+      "groups": { "length": 1 },
+      "final_statement": { "not_empty": true, "includes_any": ["library", "cafeteria"] },
+      "anonymous_question": { "is_empty": true }
+    }
+  },
+  {
+    "id": "compare_two_readings",
+    "fn": "moderator.compareUnderstanding",
+    "note": "Two readings. One neutral question, no counts, no names.",
+    "input": {
+      "decision": "We will do crowding prediction using campus data.",
+      "question": "What scope do you have in mind for this?",
+      "labels": ["The whole campus", "Library and cafeteria only", "The whole campus", "Library and cafeteria only"],
+      "concerns": []
+    },
+    "expect": {
+      "aligned": false,
+      "groups": { "length": 2 },
+      "anonymous_question": {
+        "includes_all": ["library", "campus"],
+        "not_includes_any": ["minsu", "seoyeon", "jiwoo", "taeho", "two of", "2 of", "half", "majority", "most of"],
+        "max_words": 45
+      },
+      "final_statement": { "is_empty": true }
+    }
+  },
+  {
+    "id": "compare_same_meaning_different_words",
+    "fn": "moderator.compareUnderstanding",
+    "note": "Free-text answers that mean the same thing must count as aligned.",
+    "mock": "skip",
+    "input": {
+      "decision": "We will do crowding prediction using campus data.",
+      "question": "What scope do you have in mind for this?",
+      "labels": ["Library and cafeteria only", "just the library + the cafeteria", "library and cafeteria, not the whole campus"],
+      "concerns": []
+    },
+    "expect": { "aligned": true, "groups": { "length": 1 } }
+  },
+  {
+    "id": "compare_one_not_sure",
+    "fn": "moderator.compareUnderstanding",
+    "note": "One member is not sure. That is not full agreement yet.",
+    "input": {
+      "decision": "We will do crowding prediction using campus data.",
+      "question": "What scope do you have in mind for this?",
+      "labels": ["Library and cafeteria only", "Not sure yet", "Library and cafeteria only"],
+      "concerns": []
+    },
+    "expect": { "aligned": false, "groups": { "length": 2 }, "anonymous_question": { "not_empty": true } }
+  },
+  {
+    "id": "compare_with_concern",
+    "fn": "moderator.compareUnderstanding",
+    "note": "An anonymous concern is passed on in neutral words, together with the question.",
+    "input": {
+      "decision": "We will do crowding prediction using campus data.",
+      "question": "What scope do you have in mind for this?",
+      "labels": ["The whole campus", "Library and cafeteria only", "The whole campus", "Library and cafeteria only"],
+      "concerns": ["the scope may be too big for one semester"]
+    },
+    "expect": {
+      "aligned": false,
+      "anonymous_question": { "includes_any": ["semester", "too big", "scope"], "includes_all": ["concern"] }
+    }
+  }
+]

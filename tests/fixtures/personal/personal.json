@@ -1,0 +1,190 @@
+[
+  {
+    "id": "chat_catch_up",
+    "fn": "personal.chat",
+    "note": "The user asks what is going on. Summarize the group chat, offer no draft.",
+    "input": {
+      "user": "Jiwoo",
+      "goal": "Pick one topic for our social computing team project",
+      "stage": "ideation",
+      "group": [
+        { "author": "Minsu", "text": "How about a study group matching app?" },
+        { "author": "Seoyeon", "text": "A chatbot for club recruiting could work too." }
+      ],
+      "privateHistory": [],
+      "message": "What are they talking about right now?"
+    },
+    "expect": {
+      "reply": { "includes_any": ["study", "matching", "chatbot", "recruit"] },
+      "share_draft": { "is_null": true },
+      "concern": { "is_null": true }
+    }
+  },
+  {
+    "id": "chat_keep_private",
+    "fn": "personal.chat",
+    "note": "The user wants the idea remembered, not shared. No draft.",
+    "input": {
+      "user": "Jiwoo",
+      "goal": "Pick one topic for our social computing team project",
+      "stage": "ideation",
+      "group": [],
+      "privateHistory": [
+        { "id": "p_fixture_1", "role": "user", "text": "I'm interested in campus life problems. Help me think." },
+        { "id": "p_fixture_2", "role": "agent", "text": "A few directions: crowding in the cafeteria and library, lost and found, booking study rooms." }
+      ],
+      "message": "Crowding sounds good, but I'm not sure we can get the data. Just keep it in mind for now, don't share it."
+    },
+    "expect": { "share_draft": { "is_null": true }, "concern": { "is_null": true } }
+  },
+  {
+    "id": "chat_vague_unease",
+    "fn": "personal.chat",
+    "note": "The concern is still vague. Ask a question, do not create a concern yet.",
+    "input": {
+      "user": "Seoyeon",
+      "goal": "Pick one topic for our social computing team project",
+      "stage": "agreement",
+      "group": [
+        { "author": "Jiwoo", "text": "What about predicting how crowded the cafeteria and library are?" },
+        { "author": "Minsu", "text": "Nice. Let's go with crowding prediction then, for the whole campus." }
+      ],
+      "privateHistory": [],
+      "message": "Something about this bothers me, but I can't tell what."
+    },
+    "expect": { "reply": { "includes_any": ["?"] }, "concern": { "is_null": true } }
+  },
+  {
+    "id": "chat_clear_concern",
+    "fn": "personal.chat",
+    "note": "The concern is now specific. Offer it with a neutral label that has no names.",
+    "input": {
+      "user": "Seoyeon",
+      "goal": "Pick one topic for our social computing team project",
+      "stage": "agreement",
+      "group": [
+        { "author": "Jiwoo", "text": "What about predicting how crowded the cafeteria and library are?" },
+        { "author": "Minsu", "text": "Nice. Let's go with crowding prediction then, for the whole campus." }
+      ],
+      "privateHistory": [
+        { "id": "p_fixture_3", "role": "user", "text": "Something about this bothers me, but I can't tell what." },
+        { "id": "p_fixture_4", "role": "agent", "text": "Is it the scope, the data, or the timeline that worries you?" }
+      ],
+      "message": "The scope. The whole campus is too big for one semester. But everyone seems to like it, so it's hard to say."
+    },
+    "expect": { "concern": { "includes_any": ["scope", "big", "semester"], "not_includes_any": ["minsu", "seoyeon"] } }
+  },
+  {
+    "id": "angle_reply_has_view",
+    "fn": "personal.angleReply",
+    "note": "The user has a private thought on the angle. Label is short and carries no private detail.",
+    "input": {
+      "user": "Jiwoo",
+      "goal": "Pick one topic for our social computing team project",
+      "angle": "using real campus data",
+      "group": [
+        { "author": "Minsu", "text": "How about a study group matching app?" },
+        { "author": "Seoyeon", "text": "A chatbot for club recruiting could work too." }
+      ],
+      "privateHistory": [
+        { "id": "p_fixture_5", "role": "user", "text": "Predicting crowding in the cafeteria and library sounds good, but can we get the data? I'm not sure it's a good idea yet." },
+        { "id": "p_fixture_6", "role": "agent", "text": "Noted. It stays between us." }
+      ]
+    },
+    "expect": {
+      "has_view": true,
+      "label": { "not_empty": true, "max_words": 6, "not_includes_any": ["not sure", "good idea"] },
+      "draft": { "includes_any": ["crowd", "cafeteria", "library"] }
+    }
+  },
+  {
+    "id": "angle_reply_no_view",
+    "fn": "personal.angleReply",
+    "note": "Nothing in the private chat relates to the angle.",
+    "input": {
+      "user": "Minsu",
+      "goal": "Pick one topic for our social computing team project",
+      "angle": "using real campus data",
+      "group": [{ "author": "Minsu", "text": "How about a study group matching app?" }],
+      "privateHistory": [
+        { "id": "p_fixture_7", "role": "user", "text": "Can you make my study group idea sound more exciting?" },
+        { "id": "p_fixture_8", "role": "agent", "text": "Sure. Try: a matching app that pairs students by course and schedule." }
+      ]
+    },
+    "expect": { "has_view": false, "draft": { "is_empty": true } }
+  },
+  {
+    "id": "react_connected",
+    "fn": "personal.react",
+    "note": "The teammate's idea connects to a fact the user found in private.",
+    "input": {
+      "user": "Taeho",
+      "goal": "Pick one topic for our social computing team project",
+      "newMessage": { "author": "Jiwoo", "text": "What about predicting how crowded the cafeteria and library are, so people can avoid peak times?" },
+      "group": [
+        { "author": "Minsu", "text": "How about a study group matching app?" },
+        { "author": "Jiwoo", "text": "What about predicting how crowded the cafeteria and library are, so people can avoid peak times?" }
+      ],
+      "privateHistory": [
+        { "id": "p_fixture_9", "role": "user", "text": "Is there any public campus data we could use? I heard the Wi-Fi access counts for every building are public on the campus portal. Remember that." },
+        { "id": "p_fixture_10", "role": "agent", "text": "Noted." }
+      ]
+    },
+    "expect": { "suggest": true, "draft": { "includes_any": ["wi-fi", "wifi"] } }
+  },
+  {
+    "id": "react_unrelated",
+    "fn": "personal.react",
+    "note": "No specific connection. Stay silent.",
+    "input": {
+      "user": "Taeho",
+      "goal": "Pick one topic for our social computing team project",
+      "newMessage": { "author": "Seoyeon", "text": "A chatbot for club recruiting could work too." },
+      "group": [{ "author": "Seoyeon", "text": "A chatbot for club recruiting could work too." }],
+      "privateHistory": [
+        { "id": "p_fixture_11", "role": "user", "text": "Is there any public campus data we could use? I heard the Wi-Fi access counts for every building are public on the campus portal. Remember that." },
+        { "id": "p_fixture_12", "role": "agent", "text": "Noted." }
+      ]
+    },
+    "expect": { "suggest": false }
+  },
+  {
+    "id": "check_suggest_from_private",
+    "fn": "personal.suggestCheckAnswer",
+    "note": "The user's private note points to the wider scope.",
+    "input": {
+      "user": "Taeho",
+      "goal": "Pick one topic for our social computing team project",
+      "decision": "We will do crowding prediction using campus data.",
+      "question": "What scope do you have in mind for this?",
+      "options": ["Library and cafeteria only", "The whole campus", "Not sure yet"],
+      "group": [
+        { "author": "Jiwoo", "text": "What about predicting how crowded the cafeteria and library are?" },
+        { "author": "Taeho", "text": "Wi-Fi access counts could measure that." },
+        { "author": "Minsu", "text": "Nice. Let's go with crowding prediction then, using campus data." }
+      ],
+      "privateHistory": [
+        { "id": "p_fixture_13", "role": "user", "text": "I heard the Wi-Fi access counts for every building are public. If we do crowding I want to cover all buildings, that would be impressive." }
+      ]
+    },
+    "expect": { "suggested_option": "The whole campus", "why": { "not_empty": true } }
+  },
+  {
+    "id": "check_suggest_nothing_to_go_on",
+    "fn": "personal.suggestCheckAnswer",
+    "note": "Nothing the user said points to an option. Do not guess.",
+    "input": {
+      "user": "Minsu",
+      "goal": "Pick one topic for our social computing team project",
+      "decision": "We will do crowding prediction using campus data.",
+      "question": "What scope do you have in mind for this?",
+      "options": ["Library and cafeteria only", "The whole campus", "Not sure yet"],
+      "group": [
+        { "author": "Jiwoo", "text": "What about predicting how crowded a place on campus is?" },
+        { "author": "Minsu", "text": "Nice. Let's go with crowding prediction then." }
+      ],
+      "privateHistory": [{ "id": "p_fixture_14", "role": "user", "text": "Can you make my study group idea sound more exciting?" }]
+    },
+    "expect": { "suggested_option": { "is_null": true } }
+  }
+]

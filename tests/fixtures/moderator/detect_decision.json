@@ -1,0 +1,122 @@
+[
+  {
+    "id": "decision_lets_go_with",
+    "fn": "moderator.detectDecision",
+    "note": "A clear proposal to conclude. Scope is the aspect people could read differently.",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "How about a study group matching app?" },
+        { "author": "Jiwoo", "text": "What about predicting how crowded the cafeteria and library are?" },
+        { "author": "Taeho", "text": "Wi-Fi access counts for every building are public, we could use those." },
+        { "author": "Minsu", "text": "Nice. Let's go with crowding prediction then, using campus data." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "decision": { "includes_any": ["crowd"] },
+      "question": { "not_empty": true },
+      "options": { "min_length": 3, "max_length": 4, "includes_any": ["not sure"] }
+    }
+  },
+  {
+    "id": "decision_idea_is_not_decision",
+    "fn": "moderator.detectDecision",
+    "note": "An idea being floated, not a decision.",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Seoyeon", "text": "A chatbot for club recruiting could work too." },
+        { "author": "Jiwoo", "text": "What about predicting how crowded the cafeteria and library are?" }
+      ]
+    },
+    "expect": { "is_decision": false }
+  },
+  {
+    "id": "decision_reaction_is_not_decision",
+    "fn": "moderator.detectDecision",
+    "note": "A positive reaction to an idea is not a decision yet.",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Jiwoo", "text": "What about predicting how crowded the cafeteria and library are?" },
+        { "author": "Minsu", "text": "oh that's interesting!" }
+      ]
+    },
+    "expect": { "is_decision": false }
+  },
+  {
+    "id": "decision_small_talk",
+    "fn": "moderator.detectDecision",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "Did everyone see the TA email?" },
+        { "author": "Taeho", "text": "Yes. Give me a minute, getting coffee first." }
+      ]
+    },
+    "expect": { "is_decision": false }
+  },
+  {
+    "id": "decision_korean",
+    "fn": "moderator.detectDecision",
+    "note": "Korean meeting. The check should be written in Korean.",
+    "input": {
+      "goal": "소셜컴퓨팅 팀플 주제 정하기",
+      "trigger": "new_message",
+      "group": [
+        { "author": "지우", "text": "학식이랑 도서관이 얼마나 붐비는지 예측하는 건 어때?" },
+        { "author": "태호", "text": "와이파이 접속 수로 잴 수 있을 것 같아. 건물별로 다 공개돼 있대." },
+        { "author": "민수", "text": "오 좋다. 그럼 혼잡도 예측으로 가자." }
+      ]
+    },
+    "expect": { "is_decision": true, "options": { "min_length": 3 } }
+  },
+  {
+    "id": "decision_host_request",
+    "fn": "moderator.detectDecision",
+    "note": "The host pressed the button. The latest proposal counts as the decision even without a decision phrase.",
+    "input": {
+      "goal": "Plan our weekend trip",
+      "trigger": "host_request",
+      "group": [
+        { "author": "Alex", "text": "Busan could be fun, we keep it cheap and I can book the place tonight." },
+        { "author": "Jay", "text": "cheap sounds good" },
+        { "author": "Bob", "text": "ok for me" }
+      ]
+    },
+    "expect": { "is_decision": true, "options": { "min_length": 3 } }
+  },
+  {
+    "id": "decision_enthusiastic_pitch",
+    "fn": "moderator.detectDecision",
+    "note": "A member pitches a brand-new idea with 'let's'. Nothing was discussed before, so it is not a decision.",
+    "input": {
+      "goal": "Pick one topic for our social computing team project",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "Hi all, ready to brainstorm?" },
+        { "author": "Seoyeon", "text": "Let's build a study app! I just thought of it, what do you think?" }
+      ]
+    },
+    "expect": { "is_decision": false }
+  },
+  {
+    "id": "decision_korean_reaction",
+    "fn": "moderator.detectDecision",
+    "note": "Korean reaction to an idea. Not a decision.",
+    "input": {
+      "goal": "소셜컴퓨팅 팀플 주제 정하기",
+      "trigger": "new_message",
+      "group": [
+        { "author": "지우", "text": "학식이랑 도서관이 얼마나 붐비는지 예측하는 건 어때?" },
+        { "author": "태호", "text": "오 괜찮은데? 재밌겠다." }
+      ]
+    },
+    "expect": { "is_decision": false }
+  }
+]

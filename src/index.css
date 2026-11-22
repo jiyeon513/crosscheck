@@ -1765,6 +1765,365 @@ button.schedule-row.past:hover {
   }
 }
 
+/* ---------- Meeting room: moderator, anonymous posts, agreement ---------- */
+
+.status-bar.warn {
+  background: var(--log-soft);
+  border-bottom-color: var(--log-line);
+  color: #8a5a12;
+}
+
+.host-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--log-soft);
+  color: #8a5a12;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.anon-avatar {
+  background: var(--ink-3);
+  font-size: 12px;
+}
+
+.bubble-row.anonymous .bubble-author {
+  font-style: italic;
+}
+
+.bubble-row.moderator .bubble-label {
+  color: var(--mod);
+}
+
+.bubble-action {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--agent-line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--agent);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.bubble-action:hover:not(:disabled) {
+  background: var(--agent-soft);
+}
+
+.agreement {
+  display: grid;
+  gap: 6px;
+  margin: 10px 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--log-line);
+  border-radius: 12px;
+  background: var(--log-soft);
+}
+
+.agreement.aligned {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+}
+
+.agreement.mismatch {
+  border-color: #f2c4a8;
+  background: #fff5ee;
+}
+
+.agreement-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 750;
+}
+
+.agreement-title em {
+  color: var(--ink-3);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.agreement-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--log);
+  animation: blink 1.4s infinite ease-in-out;
+}
+
+.agreement.aligned .agreement-dot {
+  background: var(--brand);
+  animation: none;
+}
+
+.agreement.mismatch .agreement-dot {
+  background: #d9672b;
+  animation: none;
+}
+
+.agreement-decision {
+  font-size: 13px;
+}
+
+.agreement-meter {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(183, 121, 31, 0.18);
+  overflow: hidden;
+}
+
+.agreement-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--log);
+  transition: width 0.3s;
+}
+
+.agreement-meta {
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+
+.agreement-host {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.agreement-host > span {
+  margin-right: auto;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.agreement-revise {
+  display: grid;
+  gap: 6px;
+}
+
+.agreement-revise input {
+  padding: 7px 9px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+/* ---------- Private window cards ---------- */
+
+.pcard {
+  display: grid;
+  gap: 7px;
+  max-width: 94%;
+  padding: 11px 12px;
+  border: 1px solid var(--agent-line);
+  border-left: 3px solid var(--agent);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(109, 85, 199, 0.08);
+  font-size: 13px;
+  animation: pop 0.18s ease-out;
+}
+
+.pcard.check {
+  border-left-color: var(--log);
+}
+
+.pcard.concern {
+  border-left-color: #d9672b;
+}
+
+.pcard.shared,
+.pcard.dismissed,
+.pcard.superseded,
+.pcard.raised_named,
+.pcard.raised_anonymous,
+.pcard.closed {
+  opacity: 0.7;
+  box-shadow: none;
+}
+
+.pcard-kicker {
+  color: var(--agent);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pcard.check .pcard-kicker {
+  color: var(--log);
+}
+
+.pcard.concern .pcard-kicker {
+  color: #b8521f;
+}
+
+.pcard textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.pcard textarea:focus {
+  outline: none;
+  border-color: var(--agent);
+  background: var(--surface);
+}
+
+.pcard-draft {
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+.pcard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pcard-actions .btn.small {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.pcard.share .btn.primary,
+.pcard.concern .btn.primary {
+  background: var(--agent);
+}
+
+.pcard.check .btn.primary {
+  background: var(--log);
+}
+
+.pcard-status {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pcard-ask {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.pcard-ask:hover {
+  color: var(--agent);
+  text-decoration: underline;
+}
+
+.pcard-decision {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: var(--log-soft);
+  font-weight: 600;
+}
+
+.pcard-question {
+  font-weight: 650;
+}
+
+.pcard-why {
+  color: var(--agent);
+  font-size: 12.5px;
+}
+
+.pcard-options {
+  display: grid;
+  gap: 5px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.option.on {
+  border-color: var(--log);
+  background: var(--log-soft);
+}
+
+.option input[type="radio"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--log);
+}
+
+.option .own {
+  flex: 1;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.guess {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--agent-soft);
+  color: var(--agent);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.approve {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.approve input {
+  width: auto;
+  accent-color: var(--brand);
+}
+
+.fine-left {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.pcard-answered {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 980px) {

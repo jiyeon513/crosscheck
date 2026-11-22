@@ -1,52 +1,66 @@
+// The meeting room: team chat (with the Moderator), the current meeting's decision log,
+// and this person's private window with their Personal Agent.
+//
+// The agents run on the server (agents/meeting.ts, served by server/rooms.ts). This page polls
+// its own view of the room. Stream keeps the schedule, manual decisions and the persistent chat copy.
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import type { Channel } from "stream-chat";
 import { useCreateChatClient } from "stream-chat-react";
-import { Logo, type JoinResult, joinGroup } from "./api";
+import type { ModeratorNote } from "../agents/protocol";
+import { Logo, type JoinResult, type RoomGroupMessage, joinGroup } from "./api";
 import {
-  agentThread,
+  Bubble,
+  Composer,
+  People,
+  clearCarried,
+  readDrop,
+  type Quote,
+  type Source,
+} from "./chatParts";
+import CurrentLog from "./Meetings";
+import {
+  currentMeeting,
   decisionsFor,
   demoMessagesFor,
   formatMeetingTime,
   markOpened,
   meetingsFor,
-  currentMeeting,
-  saveAgentThread,
   saveDecisions,
   saveMeetings,
   sortMeetings,
-  type AgentMessage,
   type Decision,
   type Group,
   type Meeting,
   type Profile,
-  type Quote,
-  type TeamMessage,
 } from "./model";
+import PrivateWindow, { type AgentReference } from "./PrivateWindow";
 import { Avatar } from "./ui";
-import CurrentLog from "./Meetings";
+import { useRoom } from "./useRoom";
 
-type Source = "team" | "agent" | "user";
-type Carried = { from: Source | ""; author: string; text: string };
 type Target = "team" | "agent" | "log";
 
-let carried: Carried | null = null;
-
 const LOG_OPEN_KEY = "crosscheck.logOpen";
-/** Older team messages posted by the removed moderator agent. */
-const MODERATOR_ID = "crosscheck-moderator";
+
+/** A team chat line as this page draws it. */
+type ChatLine = {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+  mine: boolean;
+  kind: "user" | "moderator";
+  anonymous?: boolean;
+  note?: ModeratorNote;
+  quote?: Quote;
+  forwarded?: boolean;
+};
 
 type WireMessage = {
   id?: string;
   text?: string;
   created_at?: unknown;
   user?: { id?: string; name?: string } | null;
-  custom?: {
-    kind?: string;
-    quote?: Quote;
-    forwarded?: boolean;
-    meetingId?: string;
-    meeting?: Meeting;
-  } | null;
+  custom?: { kind?: string; meetingId?: string; meeting?: Meeting } | null;
 };
 
 export default function Room({
@@ -59,18 +73,13 @@ export default function Room({
   onBack: () => void;
 }) {
   const [session, setSession] = useState<JoinResult | null>(null);
-  const [ready, setReady] = useState(false);
-  const [connectError, setConnectError] = useState("");
-  const [liveChat, setLiveChat] = useState<TeamMessage[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>(() => decisionsFor(group.id));
-  const [agentMessages, setAgentMessages] = useState<AgentMessage[]>(() =>
-    agentThread(group.id, profile.name),
-  );
+  const [meetings, setMeetings] = useState<Meeting[]>(() => meetingsFor(group.id));
   const [teamDraft, setTeamDraft] = useState("");
   const [teamQuote, setTeamQuote] = useState<Quote | null>(null);
-  const [agentDraft, setAgentDraft] = useState("");
-  const [agentQuote, setAgentQuote] = useState<Quote | null>(null);
-  const [meetings, setMeetings] = useState<Meeting[]>(() => meetingsFor(group.id));
+  const [sendingTeam, setSendingTeam] = useState(false);
+  const [agentReference, setAgentReference] = useState<AgentReference | null>(null);
+  const [exploring, setExploring] = useState<string | null>(null);
   const [over, setOver] = useState<Target | null>(null);
   const [dragging, setDragging] = useState<Source | null>(null);
   const [notice, setNotice] = useState("");
@@ -85,12 +94,23 @@ export default function Room({
   const [flash, setFlash] = useState(false);
   const channelRef = useRef<Channel | null>(null);
   const teamEnd = useRef<HTMLDivElement | null>(null);
-  const agentEnd = useRef<HTMLDivElement | null>(null);
+
+  const current = currentMeeting(meetings);
+  const demo = useMemo(() => demoMessagesFor(group.id), [group.id]);
+  const room = useRoom({
+    code: group.code,
+    user: profile.name,
+    groupTitle: group.title,
+    meeting: current,
+    history: demo,
+  });
+  const view = room.view;
 
   useEffect(() => {
     markOpened(group.id);
   }, [group.id]);
 
+  // Stream: membership in the group channel, for the schedule and decision records.
   useEffect(() => {
     let cancelled = false;
     joinGroup({ name: profile.name, code: group.code, title: group.title })
@@ -98,33 +118,55 @@ export default function Room({
         if (!cancelled) setSession(result);
       })
       .catch((caught: unknown) => {
-        if (!cancelled) {
-          setConnectError(caught instanceof Error ? caught.message : "Could not connect.");
-        }
+        // The meeting room works without Stream; it just is not kept after a server restart.
+        console.warn("Stream unavailable:", caught);
       });
     return () => {
       cancelled = true;
     };
   }, [group.code, group.title, profile.name]);
 
-  const demo = useMemo(() => demoMessagesFor(group.id), [group.id]);
-  const teamMessages = useMemo(() => {
-    const liveIds = new Set(liveChat.map((message) => message.id));
-    return [...demo.filter((message) => !liveIds.has(message.id)), ...liveChat];
-  }, [demo, liveChat]);
-  const people = useMemo(() => {
-    const names = new Set<string>();
-    for (const message of teamMessages) names.add(message.author);
-    names.add(profile.name);
-    return [...names];
-  }, [profile.name, teamMessages]);
+  // Decisions the team agreed on through the moderator's check join this meeting's decision log.
+  useEffect(() => {
+    if (!view || !current || view.decisions.length === 0) return;
+    const incoming: Decision[] = view.decisions.map((record) => ({
+      id: record.streamId,
+      groupId: group.id,
+      meetingId: current.id,
+      text: record.statement,
+      author: "Agreed by everyone",
+      createdAt: new Date(record.at).toISOString(),
+    }));
+    setDecisions((existing) => {
+      if (incoming.every((item) => existing.some((known) => known.id === item.id))) return existing;
+      const merged = mergeById(existing, incoming).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      saveDecisions(group.id, merged);
+      return merged;
+    });
+  }, [view, current, group.id]);
+
+  const lines: ChatLine[] = useMemo(() => {
+    if (!view) {
+      return demo.map((message) => ({ ...message, mine: message.author === profile.name, kind: "user" as const }));
+    }
+    return view.group.map((message: RoomGroupMessage) => ({
+      id: message.id,
+      author: message.author,
+      text: message.text,
+      createdAt: new Date(message.at).toISOString(),
+      mine: message.kind === "user" && !message.anonymous && message.author === profile.name,
+      kind: message.kind,
+      anonymous: message.anonymous,
+      note: message.note,
+      quote: message.quote,
+      forwarded: message.forwarded,
+    }));
+  }, [view, demo, profile.name]);
+  const people = view?.participants ?? [profile.name];
 
   useEffect(() => {
     teamEnd.current?.scrollIntoView({ block: "end" });
-  }, [teamMessages.length]);
-  useEffect(() => {
-    agentEnd.current?.scrollIntoView({ block: "end" });
-  }, [agentMessages.length]);
+  }, [lines.length]);
 
   function toggleLog() {
     setLogOpen((open) => {
@@ -142,13 +184,7 @@ export default function Room({
     saveDecisions(group.id, next);
   }
 
-  function rememberAgent(next: AgentMessage[]) {
-    setAgentMessages(next);
-    saveAgentThread(group.id, profile.name, next);
-  }
-
-  const current = currentMeeting(meetings);
-
+  /** A decision written or dropped into the log by hand. */
   async function recordDecision(text: string) {
     const meetingId = current?.id ?? "";
     const trimmed = text.trim();
@@ -176,7 +212,6 @@ export default function Room({
           custom: { kind: "decision", ...(meetingId ? { meetingId } : {}) },
         },
       });
-      setNotice("");
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : "Saved on this device only.");
     }
@@ -201,16 +236,14 @@ export default function Room({
     const channel = channelRef.current;
     if (!channel) return false;
     const { pendingShare: _pending, ...shared } = meeting;
-    const { title, startsAt } = meeting;
     try {
       await channel.sendMessage({
         message: {
           id: meeting.id,
-          text: `Scheduled ${title} · ${formatMeetingTime(startsAt)}`,
+          text: `Scheduled ${meeting.title} · ${formatMeetingTime(meeting.startsAt)}`,
           custom: { kind: "meeting", meeting: shared },
         },
       });
-      setNotice("");
       return true;
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : "Saved on this device only.");
@@ -218,7 +251,7 @@ export default function Room({
     }
   }
 
-  /** Meetings scheduled from the group page are announced once the room is connected. */
+  /** Meetings scheduled from the group page are announced once Stream is connected. */
   async function sharePending() {
     const pending = meetingsFor(group.id).filter((item) => item.pendingShare);
     if (pending.length === 0) return;
@@ -237,43 +270,36 @@ export default function Room({
     event.preventDefault();
     const text = teamDraft.trim();
     const quote = teamQuote;
-    const channel = channelRef.current;
-    if ((!text && !quote) || !channel) return;
+    if ((!text && !quote) || sendingTeam) return;
+    setSendingTeam(true);
     setTeamDraft("");
     setTeamQuote(null);
     try {
-      await channel.sendMessage({
-        message: {
-          text: text || quote!.text,
-          custom: quote ? { quote, forwarded: !text } : {},
-        },
-      });
+      await room.act("group", { text, ...(quote ? { quote } : {}) });
       setNotice("");
     } catch (caught) {
       setTeamDraft(text);
       setTeamQuote(quote);
       setNotice(caught instanceof Error ? caught.message : "Could not send that message.");
+    } finally {
+      setSendingTeam(false);
     }
   }
 
-  function sendAgent(event: FormEvent) {
-    event.preventDefault();
-    const text = agentDraft.trim();
-    const quote = agentQuote;
-    if (!text && !quote) return;
-    rememberAgent([
-      ...agentMessages,
-      {
-        id: crypto.randomUUID(),
-        label: "",
-        text,
-        createdAt: new Date().toISOString(),
-        from: "user",
-        ...(quote ? { quote } : {}),
-      },
-    ]);
-    setAgentDraft("");
-    setAgentQuote(null);
+  /** The moderator offered an angle to everyone; think about it privately with the agent. */
+  async function explore(line: ChatLine) {
+    setExploring(line.id);
+    try {
+      await room.act("private", {
+        text: "Help me think about this angle.",
+        groupMessageId: line.id,
+        intent: "invite_brainstorm",
+      });
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "The personal agent did not answer.");
+    } finally {
+      setExploring(null);
+    }
   }
 
   function dropZone(target: Target) {
@@ -287,7 +313,7 @@ export default function Room({
       onDragLeave: (event: DragEvent) => {
         const next = event.relatedTarget as Node | null;
         if (next && (event.currentTarget as Node).contains(next)) return;
-        setOver((current) => (current === target ? null : current));
+        setOver((value) => (value === target ? null : value));
       },
       onDrop: (event: DragEvent) => acceptDrop(event, target),
     };
@@ -299,15 +325,21 @@ export default function Room({
     const payload = readDrop(event);
     setOver(null);
     setDragging(null);
-    carried = null;
+    clearCarried();
     if (!payload) return;
     if (target === "log") {
       void recordDecision(payload.text);
       return;
     }
-    const quote = { author: payload.author, text: payload.text };
-    if (target === "team") setTeamQuote(quote);
-    else setAgentQuote(quote);
+    if (target === "team") {
+      setTeamQuote({ author: payload.author, text: payload.text });
+      return;
+    }
+    setAgentReference(
+      payload.from === "team" && payload.messageId
+        ? { kind: "group", id: payload.messageId, author: payload.author, text: payload.text }
+        : { kind: "text", author: payload.author, text: payload.text },
+    );
   }
 
   async function copyCode() {
@@ -320,15 +352,12 @@ export default function Room({
     }
   }
 
-  const now = new Date();
-  const timeline = buildTimeline(teamMessages, meetings, now);
-  const dragProps = {
-    onDragState: (from: Source | null) => {
-      setDragging(from);
-      if (!from) setOver(null);
-    },
+  const timeline = buildTimeline(lines, meetings, new Date());
+  const onDragState = (from: Source | null) => {
+    setDragging(from);
+    if (!from) setOver(null);
   };
-  const status = connectError || notice;
+  const status = room.error || notice;
 
   return (
     <main className={dragging ? "screen room-screen is-dragging" : "screen room-screen"}>
@@ -340,27 +369,31 @@ export default function Room({
           <Logo />
           <span className="divider" aria-hidden="true" />
           <h1>{group.title}</h1>
-          <button
-            className="code-chip"
-            type="button"
-            onClick={copyCode}
-            title="Copy invitation code"
-          >
+          <button className="code-chip" type="button" onClick={copyCode} title="Copy invitation code">
             {copied ? "Copied" : group.code.toUpperCase()}
           </button>
         </div>
         <span className="me">
           <Avatar name={profile.name} />
           {profile.name}
+          {view?.isHost ? <em className="host-tag">Host</em> : null}
         </span>
       </header>
       {status ? <p className="status-bar">{status}</p> : null}
+      {view?.llm.mode === "unconfigured" ? (
+        <p className="status-bar warn">
+          Agents are off: set OPENROUTER_API_KEY in the server&apos;s .env and restart it.
+        </p>
+      ) : null}
       <div className={logOpen ? "workspace" : "workspace log-closed"}>
         <section className="chat-panel team-panel">
           <header className="panel-head">
             <div>
               <h2>Team conversation</h2>
-              <p>One ongoing chat across every meeting</p>
+              <p>
+                {current ? `${current.title} · ` : ""}
+                Moderator is listening
+              </p>
             </div>
             <People people={people} />
           </header>
@@ -372,25 +405,19 @@ export default function Room({
                 item.kind === "meeting" ? (
                   <div
                     key={`m-${item.meeting.id}`}
-                    className={
-                      current?.id === item.meeting.id ? "meeting-divider on" : "meeting-divider"
-                    }
+                    className={current?.id === item.meeting.id ? "meeting-divider on" : "meeting-divider"}
                   >
                     <span>
                       {item.meeting.title} · {formatMeetingTime(item.meeting.startsAt)}
                     </span>
                   </div>
                 ) : (
-                  <Bubble
-                    key={item.message.id}
-                    from="team"
-                    mine={item.message.mine}
-                    author={item.message.author}
-                    text={item.message.text}
-                    quote={item.message.quote}
-                    forwarded={item.message.forwarded}
-                    moderator={item.message.moderator}
-                    {...dragProps}
+                  <TeamLine
+                    key={item.line.id}
+                    line={item.line}
+                    exploring={exploring === item.line.id}
+                    onExplore={() => void explore(item.line)}
+                    onDragState={onDragState}
                   />
                 ),
               )
@@ -401,30 +428,28 @@ export default function Room({
             <LiveChannel
               session={session}
               groupId={group.id}
-              profile={profile}
               onChannel={(channel) => {
                 channelRef.current = channel;
-                setReady(true);
                 void sharePending();
               }}
-              onWire={(chat, liveDecisions, liveMeetings) => {
-                setLiveChat(chat);
+              onWire={(liveDecisions, liveMeetings) => {
                 if (liveMeetings.length) {
-                  setMeetings((current) => {
-                    const merged = sortMeetings(mergeById(current, liveMeetings));
+                  setMeetings((existing) => {
+                    const merged = sortMeetings(mergeById(existing, liveMeetings));
                     saveMeetings(group.id, merged);
                     return merged;
                   });
                 }
                 if (liveDecisions.length) {
-                  setDecisions((current) => {
-                    const merged = mergeDecisions(current, liveDecisions);
+                  setDecisions((existing) => {
+                    const merged = mergeById(existing, liveDecisions).sort((a, b) =>
+                      a.createdAt.localeCompare(b.createdAt),
+                    );
                     saveDecisions(group.id, merged);
                     return merged;
                   });
                 }
               }}
-              onError={setConnectError}
             />
           ) : null}
           <Composer
@@ -437,8 +462,9 @@ export default function Room({
             value={teamDraft}
             onChange={setTeamDraft}
             onSubmit={sendTeam}
-            placeholder={ready ? `Message the team as ${profile.name}...` : "Connecting..."}
-            canSend={ready && (teamDraft.trim().length > 0 || teamQuote !== null)}
+            placeholder={view ? `Message the team as ${profile.name}...` : "Connecting..."}
+            canSend={Boolean(view) && (teamDraft.trim().length > 0 || teamQuote !== null)}
+            busy={sendingTeam}
             dropLabel="Drop to share with the team"
           />
         </section>
@@ -455,153 +481,81 @@ export default function Room({
           over={over === "log"}
           dragging={dragging !== null}
           flash={flash}
+          agreement={view?.agreement ?? null}
+          isHost={Boolean(view?.isHost)}
+          act={room.act}
         />
 
-        <section className="chat-panel agent-panel">
-          <header className="panel-head agent-head">
-            <div className="agent-title">
-              <span className="agent-mark" aria-hidden="true">
-                ◇
-              </span>
-              <div>
-                <h2>Personal agent</h2>
-                <p>Only you can see this</p>
-              </div>
-            </div>
-          </header>
-          <div className="thread">
-            {agentMessages.map((message) =>
-              message.from === "agent" ? (
-                <Bubble
-                  key={message.id}
-                  from="agent"
-                  author="Agent"
-                  label={message.label}
-                  text={message.text}
-                  failed={message.failed}
-                  {...dragProps}
-                />
-              ) : (
-                <Bubble
-                  key={message.id}
-                  from="user"
-                  mine
-                  author={profile.name}
-                  text={message.text}
-                  quote={message.quote}
-                  {...dragProps}
-                />
-              ),
-            )}
-            <div ref={agentEnd} />
-          </div>
-          <Composer
-            tone="agent"
-            active={dragging !== null && dragging !== "agent" && dragging !== "user"}
-            over={over === "agent"}
-            zone={dropZone("agent")}
-            quote={agentQuote}
-            onClearQuote={() => setAgentQuote(null)}
-            value={agentDraft}
-            onChange={setAgentDraft}
-            onSubmit={sendAgent}
-            placeholder="Ask your personal agent..."
-            canSend={agentDraft.trim().length > 0 || agentQuote !== null}
-            dropLabel="Drop to bring to your agent"
-          />
-        </section>
+        <PrivateWindow
+          me={profile.name}
+          view={view}
+          act={room.act}
+          reference={agentReference}
+          onReference={setAgentReference}
+          zone={dropZone("agent")}
+          active={dragging !== null && dragging !== "agent" && dragging !== "user"}
+          over={over === "agent"}
+          onDragState={onDragState}
+        />
       </div>
     </main>
   );
 }
 
-function Composer({
-  tone,
-  active,
-  over,
-  zone,
-  quote,
-  onClearQuote,
-  value,
-  onChange,
-  onSubmit,
-  placeholder,
-  canSend,
-  dropLabel,
+function TeamLine({
+  line,
+  exploring,
+  onExplore,
+  onDragState,
 }: {
-  tone: "team" | "agent";
-  active: boolean;
-  over: boolean;
-  zone: {
-    onDragOver: (event: DragEvent) => void;
-    onDragLeave: (event: DragEvent) => void;
-    onDrop: (event: DragEvent) => void;
-  };
-  quote: Quote | null;
-  onClearQuote: () => void;
-  value: string;
-  onChange: (value: string) => void;
-  onSubmit: (event: FormEvent) => void;
-  placeholder: string;
-  canSend: boolean;
-  dropLabel: string;
+  line: ChatLine;
+  exploring: boolean;
+  onExplore: () => void;
+  onDragState: (from: Source | null) => void;
 }) {
-  const className = [
-    "composer",
-    `${tone}-composer`,
-    active ? "active" : "",
-    over ? "over" : "",
-  ].join(" ");
+  const note = line.note;
+  const footer =
+    note?.type === "angle_prompt" ? (
+      <button className="bubble-action" type="button" onClick={onExplore} disabled={exploring}>
+        {exploring ? "Asking your agent..." : "◇ Think about it privately"}
+      </button>
+    ) : null;
+  const label =
+    note?.type === "agreed"
+      ? "Decision agreed"
+      : note?.type === "agreement_count"
+        ? "Agreement check"
+        : note?.type === "angle_prompt"
+          ? `Missing angle · ${note.angle}`
+          : undefined;
   return (
-    <form className={className} onSubmit={onSubmit} {...zone}>
-      {quote ? (
-        <div className="quote-card attached">
-          <div>
-            <p className="quote-author">↪ {quote.author}</p>
-            <p className="quote-text">{quote.text}</p>
-          </div>
-          <button
-            className="icon-btn small"
-            type="button"
-            onClick={onClearQuote}
-            aria-label="Remove attached message"
-          >
-            ×
-          </button>
-        </div>
-      ) : null}
-      <div className="composer-row">
-        <input
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={quote ? "Add a note (optional)" : placeholder}
-          aria-label={placeholder}
-        />
-        <button className="btn primary small" type="submit" disabled={!canSend}>
-          Send
-        </button>
-      </div>
-      <div className="drop-overlay" aria-hidden="true">
-        <span>{dropLabel}</span>
-      </div>
-    </form>
+    <Bubble
+      from="team"
+      mine={line.mine}
+      author={line.author}
+      label={label}
+      text={line.text}
+      quote={line.quote}
+      forwarded={line.forwarded}
+      variant={line.kind === "moderator" ? "moderator" : line.anonymous ? "anonymous" : undefined}
+      messageId={line.id}
+      footer={footer}
+      onDragState={onDragState}
+    />
   );
 }
 
+/** Stream channel for the schedule and decision records (the chat itself comes from the room). */
 function LiveChannel({
   session,
   groupId,
-  profile,
   onChannel,
   onWire,
-  onError,
 }: {
   session: JoinResult;
   groupId: string;
-  profile: Profile;
   onChannel: (channel: Channel) => void;
-  onWire: (chat: TeamMessage[], decisions: Decision[], meetings: Meeting[]) => void;
-  onError: (message: string) => void;
+  onWire: (decisions: Decision[], meetings: Meeting[]) => void;
 }) {
   const client = useCreateChatClient({
     apiKey: session.apiKey,
@@ -610,16 +564,14 @@ function LiveChannel({
   });
   const onWireRef = useRef(onWire);
   const onChannelRef = useRef(onChannel);
-  const onErrorRef = useRef(onError);
   onWireRef.current = onWire;
   onChannelRef.current = onChannel;
-  onErrorRef.current = onError;
 
   useEffect(() => {
     if (!client) return;
     let cancelled = false;
     const channel = client.channel("messaging", groupId);
-    const sync = () => publish(channel, session.userId, profile, groupId, onWireRef.current);
+    const sync = () => publish(channel, groupId, onWireRef.current);
     channel
       .watch()
       .then(() => {
@@ -628,216 +580,50 @@ function LiveChannel({
         sync();
         channel.on("message.new", sync);
         channel.on("message.updated", sync);
-        channel.on("message.deleted", sync);
       })
-      .catch((caught: unknown) => {
-        if (!cancelled) {
-          onErrorRef.current(caught instanceof Error ? caught.message : "Could not open the room.");
-        }
-      });
+      .catch((caught: unknown) => console.warn("Could not open the Stream channel:", caught));
     return () => {
       cancelled = true;
       channel.off("message.new", sync);
       channel.off("message.updated", sync);
-      channel.off("message.deleted", sync);
     };
-  }, [client, groupId, profile, session.userId]);
+  }, [client, groupId]);
 
   return null;
 }
 
-function publish(
-  channel: Channel,
-  userId: string,
-  profile: Profile,
-  groupId: string,
-  onWire: (chat: TeamMessage[], decisions: Decision[], meetings: Meeting[]) => void,
-) {
+function publish(channel: Channel, groupId: string, onWire: (decisions: Decision[], meetings: Meeting[]) => void) {
   const messages = (channel.messagePaginator.items ?? []) as unknown as WireMessage[];
-  const chat: TeamMessage[] = [];
   const decisions: Decision[] = [];
   const meetings: Meeting[] = [];
   for (const message of messages) {
     const text = message.text?.trim() ?? "";
-    if (!text || !message.id) continue;
-    const author = message.user?.name || profile.name;
-    const createdAt = toIso(message.created_at);
     const custom = message.custom;
-    if (custom?.kind === "meeting" && custom.meeting?.id && custom.meeting.startsAt) {
+    if (!message.id || !text || !custom) continue;
+    if (custom.kind === "meeting" && custom.meeting?.id && custom.meeting.startsAt) {
       meetings.push({ ...custom.meeting, groupId });
-    } else if (custom?.kind === "decision") {
+    } else if (custom.kind === "decision") {
       decisions.push({
         id: message.id,
         groupId,
         ...(custom.meetingId ? { meetingId: custom.meetingId } : {}),
         text,
-        author,
-        createdAt,
-      });
-    } else {
-      const quote = message.custom?.quote;
-      chat.push({
-        id: message.id,
-        text,
-        author,
-        createdAt,
-        mine: message.user?.id === userId,
-        ...(message.custom?.kind === "moderator" || message.user?.id === MODERATOR_ID
-          ? { moderator: true }
-          : {}),
-        ...(quote?.text ? { quote, forwarded: Boolean(message.custom?.forwarded) } : {}),
+        author: message.user?.name || "Team",
+        createdAt: toIso(message.created_at),
       });
     }
   }
-  onWire(chat, decisions, meetings);
-}
-
-function Bubble({
-  from,
-  mine = false,
-  author,
-  label,
-  text,
-  quote,
-  forwarded = false,
-  moderator = false,
-  failed = false,
-  onDragState,
-}: {
-  from: Source;
-  moderator?: boolean;
-  failed?: boolean;
-  mine?: boolean;
-  author: string;
-  label?: string;
-  text: string;
-  quote?: Quote;
-  forwarded?: boolean;
-  onDragState: (from: Source | null) => void;
-}) {
-  const shownText = forwarded ? "" : text;
-  const dragText = shownText || quote?.text || text;
-
-  function dragStart(event: DragEvent) {
-    carried = { from, author, text: dragText };
-    event.dataTransfer.setData("application/x-crosscheck", JSON.stringify(carried));
-    event.dataTransfer.setData("text/plain", dragText);
-    event.dataTransfer.effectAllowed = "copy";
-    setDragGhost(event, author, dragText, from);
-    onDragState(from);
-  }
-
-  const className = [
-    "bubble-row",
-    from,
-    mine ? "mine" : "",
-    moderator ? "moderator" : "",
-    failed ? "failed" : "",
-  ].join(" ");
-
-  return (
-    <article
-      className={className}
-      draggable
-      onDragStart={dragStart}
-      onDragEnd={() => {
-        onDragState(null);
-        setTimeout(() => {
-          carried = null;
-        }, 0);
-      }}
-    >
-      {from === "team" && !mine ? (
-        moderator ? (
-          <span className="avatar mod-avatar" aria-hidden="true">
-            ◆
-          </span>
-        ) : (
-          <Avatar name={author} />
-        )
-      ) : null}
-      <div className="bubble-col">
-        {from === "team" && !mine ? (
-          <p className="bubble-author">
-            {author}
-            {moderator ? <em className="ai-tag">AI</em> : null}
-          </p>
-        ) : null}
-        <div className="bubble">
-          <span className="grip" aria-hidden="true">
-            ⋮⋮
-          </span>
-          {label ? <p className="bubble-label">{label}</p> : null}
-          {quote ? (
-            <div className="quote-card">
-              <div>
-                <p className="quote-author">↪ {quote.author}</p>
-                <p className="quote-text">{quote.text}</p>
-              </div>
-            </div>
-          ) : null}
-          {shownText ? <p className="bubble-text">{shownText}</p> : null}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function setDragGhost(event: DragEvent, author: string, text: string, from: Source) {
-  const ghost = document.createElement("div");
-  ghost.className = `drag-ghost ${from}`;
-  const head = document.createElement("div");
-  head.className = "drag-ghost-head";
-  head.textContent = author;
-  const body = document.createElement("div");
-  body.className = "drag-ghost-body";
-  body.textContent = text.length > 140 ? `${text.slice(0, 137)}...` : text;
-  ghost.append(head, body);
-  document.body.appendChild(ghost);
-  event.dataTransfer.setDragImage(ghost, 24, 20);
-  setTimeout(() => ghost.remove(), 0);
-}
-
-function People({ people }: { people: string[] }) {
-  const shown = people.slice(0, 4);
-  const count = people.length;
-  return (
-    <div className="people" title={people.join(", ")}>
-      <div className="avatar-stack">
-        {shown.map((name) => (
-          <Avatar key={name} name={name} size="sm" />
-        ))}
-      </div>
-      <span>{count}</span>
-    </div>
-  );
-}
-
-function readDrop(event: DragEvent): Carried | null {
-  if (carried?.text) return carried;
-  const raw = event.dataTransfer.getData("application/x-crosscheck");
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as Partial<Carried>;
-      if (parsed.text?.trim()) {
-        return { from: parsed.from ?? "", author: parsed.author ?? "", text: parsed.text.trim() };
-      }
-    } catch {
-      // Fall through to plain text from another app.
-    }
-  }
-  const text = event.dataTransfer.getData("text/plain").trim();
-  return text ? { from: "", author: "Pasted text", text } : null;
+  onWire(decisions, meetings);
 }
 
 type TimelineItem =
-  | { kind: "message"; at: string; message: TeamMessage }
+  | { kind: "message"; at: string; line: ChatLine }
   | { kind: "meeting"; at: string; meeting: Meeting };
 
 /** The team chat is one long thread; meetings that have started appear as dividers in it. */
-function buildTimeline(messages: TeamMessage[], meetings: Meeting[], now: Date): TimelineItem[] {
+function buildTimeline(lines: ChatLine[], meetings: Meeting[], now: Date): TimelineItem[] {
   const items: TimelineItem[] = [
-    ...messages.map((message) => ({ kind: "message" as const, at: message.createdAt, message })),
+    ...lines.map((line) => ({ kind: "message" as const, at: line.createdAt, line })),
     ...meetings
       .filter((meeting) => new Date(meeting.startsAt) <= now)
       .map((meeting) => ({ kind: "meeting" as const, at: meeting.startsAt, meeting })),
@@ -845,16 +631,10 @@ function buildTimeline(messages: TeamMessage[], meetings: Meeting[], now: Date):
   return items.sort((a, b) => a.at.localeCompare(b.at) || (a.kind === "meeting" ? -1 : 1));
 }
 
-function mergeById<T extends { id: string }>(current: T[], incoming: T[]) {
-  const map = new Map(current.map((item) => [item.id, item]));
+function mergeById<T extends { id: string }>(existing: T[], incoming: T[]) {
+  const map = new Map(existing.map((item) => [item.id, item]));
   for (const item of incoming) map.set(item.id, { ...map.get(item.id), ...item });
   return [...map.values()];
-}
-
-function mergeDecisions(current: Decision[], incoming: Decision[]) {
-  const map = new Map(current.map((item) => [item.id, item]));
-  for (const item of incoming) map.set(item.id, item);
-  return [...map.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 function toIso(value: unknown) {
