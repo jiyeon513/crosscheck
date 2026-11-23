@@ -61,7 +61,6 @@ export default function CurrentLog({
   // Closed: the panel is gone; the "Decision log" button in the team chat header opens it.
   if (!open) return null;
 
-  const checking = agreement?.status === "collecting";
 
   return (
     <section className={panelClass} {...zone}>
@@ -128,7 +127,6 @@ export default function CurrentLog({
         </section>
       </div>
 
-      <ModeratorTools act={act} checking={checking} />
       <button className="past-link" type="button" onClick={onOpenGroup}>
         Schedule & past decision logs ›
       </button>
@@ -138,7 +136,8 @@ export default function CurrentLog({
 }
 
 /** Shortcuts to the Moderator that any member can use. */
-function ModeratorTools({ act, checking }: { act: Act; checking: boolean }) {
+/** Shortcuts to the Moderator that any member can use; shown above the team chat composer. */
+export function ModeratorTools({ act, checking }: { act: Act; checking: boolean }) {
   const [angle, setAngle] = useState("");
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -160,8 +159,8 @@ function ModeratorTools({ act, checking }: { act: Act; checking: boolean }) {
   }
 
   return (
-    <div className="host-tools">
-      <span className="host-label">Ask the Moderator</span>
+    <div className="chat-tools">
+      <span className="chat-tools-label">Ask the Moderator</span>
       {asking ? (
         <form
           className="angle-form"

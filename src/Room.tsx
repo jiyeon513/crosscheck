@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type
 import type { GroupMessage } from "../agents/protocol";
 import { api, Logo, type RoomView } from "./api";
 import { Bubble, Composer, People, clearCarried, joinDraft, pasteToDraft, readDrop, type Quote, type Source } from "./chatParts";
-import CurrentLog, { AgreementBox } from "./Meetings";
+import CurrentLog, { AgreementBox, ModeratorTools } from "./Meetings";
 import { currentMeeting, formatMeetingTime, type GroupDetail, type Meeting } from "./model";
 import PrivateWindow, { type AgentReference } from "./PrivateWindow";
 import { Avatar } from "./ui";
@@ -299,6 +299,7 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
               )}
               <div ref={teamEnd} />
             </div>
+            <ModeratorTools act={room.act} checking={view?.agreement?.status === "collecting"} />
             <Composer
               tone="team"
               active={dragging !== null && dragging !== "team"}
