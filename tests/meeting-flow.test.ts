@@ -14,8 +14,8 @@ const cards = (m: Meeting, user: string): Card[] =>
 const openCheckCard = (m: Meeting, user: string) =>
   cards(m, user).find((c) => c.kind === "understanding_check" && c.status === "open");
 
-function room() {
-  const m = new Meeting({ goal: "Pick a project topic", host: "Minsu" });
+function room(rules: ConstructorParameters<typeof Meeting>[0]["rules"] = {}) {
+  const m = new Meeting({ goal: "Pick a project topic", host: "Minsu", rules });
   m.join("Jiwoo");
   m.join("Taeho");
   return m;
@@ -111,7 +111,7 @@ test("agents read quoted replies, and suggestion cards pause while a check colle
     return { suggested_option: null, why: "Why?", evidence: [] };
   });
   try {
-    const m = room();
+    const m = room({ reactWithoutAngleAfter: 0 });
     await m.sendPrivateMessage("Jiwoo", "I like libraries.");
     await m.postGroupMessage("Taeho", "Sure", { quote: { author: "Minsu", text: "Library first?" } });
     assert.ok(seen.some((text) => text.includes('(replying to Minsu: "Library first?") Sure')));
@@ -144,4 +144,56 @@ test("any member, not only the host, can ask about an angle or ask for an agreem
   await m.postGroupMessage("Taeho", "How about a study app?");
   await m.startCheck("Jiwoo");
   assert.equal(m.check?.status, "collecting");
+});
+
+test("while brainstorming, suggestion cards wait until the Moderator has looked for a missing angle", async () => {
+  const calls: string[] = [];
+  useFixtureGenerator(async (prompt, context) => {
+    calls.push(prompt);
+    const c = context as { privateHistory?: { id: string; role: string; text: string }[] };
+    const note = c.privateHistory?.find((m) => m.role === "user");
+    switch (prompt) {
+      case "moderator/detect_decision":
+        return { is_decision: false, decision: "", ambiguity: "", question: "", options: [], reason: "" };
+      case "moderator/find_missing_angle":
+        return { action: "ask_angle", angle: "using real campus data", group_prompt: "Any thoughts on campus data?", reason: "" };
+      case "personal/chat":
+        return { reply: "Noted.", share_draft: null, concern: null };
+      default: // react and angle_reply: ground on the member's own note
+        return note
+          ? { kind: "grounded", nudge: "Your note fits.", draft: "Wi-Fi counts could measure crowding.", evidence: [{ id: note.id, quote: note.text }] }
+          : { kind: "none", nudge: "", draft: "", evidence: [] };
+    }
+  });
+  try {
+    let clock = 0;
+    const m = new Meeting({ goal: "Pick a project topic", host: "Minsu", now: () => clock, rules: { silenceMs: 20_000 } });
+    m.join("Jiwoo");
+    m.join("Taeho");
+    await m.sendPrivateMessage("Taeho", "Wi-Fi access counts for every building are public data.");
+    await m.postGroupMessage("Minsu", "How about a study group matching app?");
+    await m.postGroupMessage("Jiwoo", "Crowding prediction for the cafeteria could work too.");
+    assert.equal(calls.includes("personal/react"), false); // no unprompted cards yet
+    clock += 25_000;
+    await m.tick(); // silence: the Moderator looks for a missing angle and asks the agents
+    assert.ok(cards(m, "Taeho").some((c) => c.kind === "share_suggestion" && c.source === "missing_angle"));
+    assert.ok(calls.indexOf("moderator/find_missing_angle") < calls.indexOf("personal/angle_reply"));
+    clock += 40_000;
+    await m.postGroupMessage("Minsu", "Nice idea.");
+    assert.ok(calls.includes("personal/react")); // after the angle, reactions run again
+  } finally {
+    enableFixtureModels();
+  }
+});
+
+test("the personal agent is told to answer in the language the member wrote in", async () => {
+  const seen: unknown[] = [];
+  const capture: personal.Generate = async (_prompt, context) => {
+    seen.push((context as { reply_language: string }).reply_language);
+    return { reply: "ok", share_draft: null, concern: null };
+  };
+  const base = { user: "Min", goal: "g", group: [], privateHistory: [], stage: "ideation" as const };
+  await personal.chat({ ...base, message: "What should I bring?" }, undefined, capture);
+  await personal.chat({ ...base, message: "뭘 준비하면 좋을까?" }, undefined, capture);
+  assert.deepEqual(seen, ["English", "Korean"]);
 });

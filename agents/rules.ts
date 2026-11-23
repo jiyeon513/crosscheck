@@ -18,6 +18,11 @@ export type Rules = {
   privateContextTurns: number;
   /** A new decision replaces the open check only while fewer than this share of members have answered it. */
   supersedeBelowAnswered: number;
+  /**
+   * While brainstorming, unprompted suggestion cards wait until the Moderator has looked for a missing
+   * angle once, so the angle comes first. They start anyway after this many team posts.
+   */
+  reactWithoutAngleAfter: number;
 };
 
 export const DEFAULT_RULES: Rules = {
@@ -29,4 +34,5 @@ export const DEFAULT_RULES: Rules = {
   groupContextMessages: 60,
   privateContextTurns: 30,
   supersedeBelowAnswered: 0.5,
+  reactWithoutAngleAfter: 6,
 };

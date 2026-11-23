@@ -34,8 +34,16 @@ const suggestionSchema = record({
 });
 const checkSchema = record({ suggested_option: nullableString, why: string, evidence: evidenceSchema });
 
-function context(input: Base) {
+/** The language the owner last wrote in. The model is told to use it, because it often drifts otherwise. */
+export function replyLanguage(input: Base, latest?: string): "Korean" | "English" {
+  const own = latest ?? [...input.privateHistory].reverse().find((m) => m.role === "user")?.text
+    ?? [...input.group].reverse().find((m) => m.author === input.user && m.kind !== "moderator")?.text ?? "";
+  return /[\uac00-\ud7a3]/.test(own) ? "Korean" : "English";
+}
+
+function context(input: Base, latest?: string) {
   return {
+    reply_language: replyLanguage(input, latest),
     user: input.user, goal: input.goal,
     group: input.group.map(({ id, author, kind, text }) => ({ id, author, kind, text })),
     privateHistory: input.privateHistory.map(({ id, role, text }) => ({ id, role, text })),
@@ -133,7 +141,7 @@ function containsInternalId(input: Base, text: string, reference?: ChatInput["re
 export async function chat(input: ChatInput, log?: Log, generate: Generate = callPersonalJSON): Promise<ChatResult> {
   return withRetry("chat", async () => {
     const data = await generate("personal/chat", {
-      ...context(input), stage: input.stage, message: input.message, reference: cardContext(input.reference), intent: input.intent ?? null,
+      ...context(input, input.message), stage: input.stage, message: input.message, reference: cardContext(input.reference), intent: input.intent ?? null,
     }, chatSchema, log);
     requireFormat(isObject(data) && nonblank(data.reply), "empty reply");
     requireFormat(data.share_draft === null || nonblank(data.share_draft), "blank share_draft");

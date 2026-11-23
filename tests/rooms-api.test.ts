@@ -74,9 +74,11 @@ test("accounts, groups, a meeting room with agents, an agreed decision and its l
     assert.equal((await view("Minsu")).isHost, true);
     assert.equal((await view("Jiwoo")).isHost, false);
 
-    // Taeho thinks privately; Jiwoo posts a related idea; only Taeho gets a suggestion, and shares it anonymously.
+    // Taeho thinks privately. Jiwoo asks the Moderator about a missing angle (any member can);
+    // only Taeho's agent finds a related note, so only Taeho gets a suggestion. He shares it anonymously.
     await act("Taeho", "private", { text: "I found that campus Wi-Fi access counts are public." });
     await act("Jiwoo", "group", { text: "What about predicting how crowded the cafeteria gets?" });
+    await act("Jiwoo", "angle", { angle: "using real campus data" });
     const taeho = await until(() => view("Taeho"), (v) => cards(v).some((c) => c.kind === "share_suggestion"));
     assert.equal(cards(await view("Jiwoo")).some((c) => c.kind === "share_suggestion"), false);
     const suggestion = cards(taeho).find((c) => c.kind === "share_suggestion")!;

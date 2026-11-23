@@ -69,6 +69,10 @@ export class Meeting {
   private anglesAsked: string[] = [];
   private userMsgsAtLastAngleRun = 0;
   private angleBusy = false;
+  /** The Moderator has looked for a missing angle at least once in this meeting. */
+  private angleLooked = false;
+  /** Team posts made in this meeting (not earlier chat a room was started with). */
+  private postsThisMeeting = 0;
   private detection?: Promise<void>;
   private pendingDetection?: "new_message" | "host_request";
   private comparison?: { check: Check; inputs: string };
@@ -119,8 +123,10 @@ export class Meeting {
     if (quote?.text?.trim()) msg.quote = { author: quote.author || "Someone", text: quote.text.trim() };
     this.log("user_to_group", anonymous ? "anonymous" : `user:${user}`, "group", {});
 
-    // While members are answering a check, unprompted suggestion cards only distract; concerns still go through chat.
-    const jobs = this.checkOpen() ? [] : [this.runReactions(msg, user)];
+    this.postsThisMeeting++;
+    // Unprompted suggestion cards wait while members answer a check (they only distract; concerns still go
+    // through chat), and while brainstorming until the Moderator has looked for a missing angle.
+    const jobs = this.reactionsAllowed() ? [this.runReactions(msg, user)] : [];
     // Detection also runs while a check is open, so a real decision can replace a false alarm.
     jobs.push(this.runDetect("new_message"));
     await Promise.all(jobs);
@@ -373,6 +379,7 @@ export class Meeting {
   /** Ideation: the chat went quiet. The moderator looks for a missing angle and asks the personal agents. */
   private async runMissingAngle(userMsgs: number): Promise<void> {
     this.angleBusy = true;
+    this.angleLooked = true;
     this.userMsgsAtLastAngleRun = userMsgs;
     try {
       const res = await moderator.findMissingAngle(
@@ -392,6 +399,7 @@ export class Meeting {
   }
 
   private async askAboutAngle(angle: string, intent: "find_contribution" | "invite_brainstorm"): Promise<boolean> {
+    this.angleLooked = true;
     this.toAgents({ type: "angle_query", angle, intent });
     const found = await Promise.all(this.participants.map(async (p) => {
       if (intent === "find_contribution" && !this.hasOwnerMessages(p)) return false;
@@ -581,6 +589,12 @@ export class Meeting {
 
   private checkOpen(): boolean {
     return this.check?.status === "collecting";
+  }
+
+  private reactionsAllowed(): boolean {
+    if (this.checkOpen()) return false;
+    if (this.stage !== "ideation") return true;
+    return this.angleLooked || this.postsThisMeeting >= this.rules.reactWithoutAngleAfter;
   }
 
   /** Statements the team agreed on in this meeting and that were not revised later. */
