@@ -45,6 +45,8 @@ export type DetectDecisionInput = {
   openProposal?: string | null;
   /** Decisions this meeting already agreed on. Re-confirming one of them is not a new decision. */
   agreed?: string[];
+  /** A decision the team is talking about again (after a split check, or a revisited agreed decision). */
+  underDiscussion?: string | null;
 };
 
 export async function detectDecision(input: DetectDecisionInput, log?: Log): Promise<DecisionDetection> {
@@ -58,6 +60,7 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
       newestMessage: newest ? `[${newest.author}] ${newest.text}` : "(none)",
       openProposal: input.openProposal?.trim() || "(none)",
       agreedDecisions: formatList(input.agreed ?? []),
+      underDiscussion: input.underDiscussion?.trim() || "(none)",
     },
     input, log,
   );
@@ -71,6 +74,9 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
     question: ok ? str(data.question) || "Is this how you understood the decision?" : "",
     options: ok ? (options.length >= 2 ? options : ["Yes, as stated", "I understood it differently", "Not sure yet"]) : [],
     reason: str(data.reason),
+    // Only a real number from the agreed list counts, and only when this is not itself a new decision.
+    challenged: !ok && Number.isInteger(data.challenged) && data.challenged! >= 1 && data.challenged! <= (input.agreed?.length ?? 0)
+      ? data.challenged : 0,
   };
 }
 

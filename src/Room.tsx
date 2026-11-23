@@ -287,6 +287,7 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
                       key={item.line.id}
                       line={item.line}
                       agreement={view?.agreement ?? null}
+                      discussing={view?.discussing ?? null}
                       isHost={Boolean(view?.isHost)}
                       act={room.act}
                       mine={item.line.kind === "user" && !item.line.anonymous && item.line.author === me}
@@ -336,6 +337,7 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
           dragging={dragging !== null}
           flash={flash}
           agreement={view?.agreement ?? null}
+          discussing={view?.discussing ?? null}
           isHost={Boolean(view?.isHost)}
           act={room.act}
         />
@@ -361,11 +363,13 @@ const NOTE_LABEL: Record<string, string> = {
   agreement_count: "Not agreed yet",
   check_opened: "Agreement check",
   check_closed: "Check closed",
+  reopen_prompt: "Revisit a decision?",
 };
 
 function TeamLine({
   line,
   agreement,
+  discussing,
   isHost,
   act,
   mine,
@@ -375,6 +379,7 @@ function TeamLine({
 }: {
   line: GroupMessage;
   agreement: RoomView["agreement"];
+  discussing: RoomView["discussing"];
   isHost: boolean;
   act: (action: string, body: object) => Promise<void>;
   mine: boolean;
@@ -393,11 +398,19 @@ function TeamLine({
       </button>
     ) : liveCheck ? (
       <AgreementBox agreement={agreement} isHost={isHost} act={act} inline />
+    ) : note?.type === "reopen_prompt" &&
+      discussing?.status === "asking" &&
+      discussing.recordId === note.recordId ? (
+      <RevisitButtons recordId={note.recordId} act={act} />
     ) : null;
   const label = note
     ? note.type === "angle_prompt"
       ? `Missing angle · ${note.angle}`
-      : NOTE_LABEL[note.type]
+      : note.type === "reopen_result"
+        ? note.reopened
+          ? "Revisiting a decision"
+          : "Decision kept"
+        : NOTE_LABEL[note.type]
     : undefined;
   return (
     <Bubble
@@ -412,6 +425,34 @@ function TeamLine({
       footer={footer}
       onDragState={onDragState}
     />
+  );
+}
+
+/** Answers to the Moderator's "revisit this agreed decision?" question. Any member can answer. */
+function RevisitButtons({ recordId, act }: { recordId: string; act: (action: string, body: object) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function answer(reopen: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      await act("reopen", { recordId, reopen });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That did not work.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="revisit-actions">
+      <button className="btn primary small" type="button" disabled={busy} onClick={() => void answer(true)}>
+        Yes, revisit it
+      </button>
+      <button className="btn secondary small" type="button" disabled={busy} onClick={() => void answer(false)}>
+        No, keep it
+      </button>
+      {error ? <p className="error small-note">{error}</p> : null}
+    </div>
   );
 }
 

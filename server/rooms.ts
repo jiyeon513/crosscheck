@@ -154,6 +154,11 @@ export async function roomAction(name: string, key: string, action: string, body
       return run(room, meeting.startCheck(name));
     case "POST check/compare":
       return run(room, meeting.compareNow(name));
+    case "POST reopen":
+      if (typeof body.reopen !== "boolean") throw new HttpError(400, "Choose whether to revisit the decision");
+      meeting.answerRevisit(name, text(body.recordId), body.reopen);
+      save(room);
+      return acknowledge;
     case "POST check/cancel":
       meeting.cancelCheck(name, text(body.checkId));
       save(room);
@@ -208,8 +213,19 @@ function save(room: Room) {
       original: record.statement,
       agreed: check?.total ? `${check.agreed ?? check.total}/${check.total}` : "",
       createdAt: new Date(record.at).toISOString(),
+      ...(record.replaces ? { replaces: `${room.instance}-${record.replaces}` } : {}),
     });
     store.save();
+  }
+  // A revisited decision is marked replaced once the new version is agreed.
+  for (const record of meeting.decisions) {
+    if (!record.replacedBy) continue;
+    const saved = store.db.decisions.find((d) => d.id === `${room.instance}-${record.id}`);
+    const by = `${room.instance}-${record.replacedBy}`;
+    if (saved && saved.replacedBy !== by) {
+      saved.replacedBy = by;
+      store.save();
+    }
   }
 }
 

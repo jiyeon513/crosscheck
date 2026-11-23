@@ -13,6 +13,9 @@ export type ModeratorNote =
   | { type: "angle_prompt"; angle: string }
   | { type: "check_opened"; version: number }
   | { type: "check_closed" }
+  /** The Moderator asks whether to revisit an agreed decision. Members answer with buttons. */
+  | { type: "reopen_prompt"; recordId: string; decision: string }
+  | { type: "reopen_result"; reopened: boolean }
   | { type: "agreement_count"; agreed: number; total: number }
   | { type: "agreed"; agreed: number; total: number; statement: string }
   | { type: "concern" };
@@ -103,6 +106,8 @@ export type DecisionDetection = {
   question: string;
   options: string[];
   reason: string;
+  /** 1-based number of an already agreed decision that the newest message questions or wants to change; 0 if none. */
+  challenged?: number;
 };
 
 export type Comparison = {
@@ -142,9 +147,31 @@ export type Check = {
   agreed?: number;
   total?: number;
   statement?: string;
+  /** Id of the agreed decision this check would replace if it is agreed. */
+  replaces?: string;
 };
 
-export type DecisionRecord = { id: string; checkId: string; version: number; supersededBy?: number; statement: string; at: number };
+export type DecisionRecord = {
+  id: string;
+  checkId: string;
+  version: number;
+  supersededBy?: number;
+  statement: string;
+  at: number;
+  /** Id of the earlier agreed decision this one replaces (after the team revisited it). */
+  replaces?: string;
+  /** Id of the later decision that replaced this one. */
+  replacedBy?: string;
+};
+
+/** A decision the team is talking about again: after a split check, or an agreed one someone questioned. */
+export type Discussion = {
+  decision: string;
+  /** "asking": the Moderator asked whether to revisit it. "open": the team is revisiting it. */
+  status: "asking" | "open";
+  /** The agreed decision being revisited, if any. */
+  recordId?: string;
+};
 
 /** Everything one participant is allowed to see. This is what GET /rooms/:id/view returns. */
 export type UserView = {
@@ -171,6 +198,8 @@ export type UserView = {
     statement?: string;
   };
   decisions: DecisionRecord[];
+  /** A decision the team is talking about again, if any. */
+  discussing: Discussion | null;
   llm: { mode: "mock" | "live" | "unconfigured"; model: string };
 };
 

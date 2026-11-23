@@ -2624,6 +2624,42 @@ button.schedule-row.past:hover {
   flex-basis: 100%;
 }
 
+/* ---------- Revisiting decisions ---------- */
+
+.revisit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.bubble-row.moderator .revisit-actions .btn.primary {
+  background: var(--mod);
+}
+
+.agreement.discussing {
+  border-color: var(--mod-line);
+  background: var(--mod-soft);
+}
+
+.agreement.discussing .agreement-dot {
+  background: var(--mod);
+}
+
+.decision.replaced {
+  opacity: 0.6;
+  background: var(--surface-2);
+}
+
+.decision.replaced .decision-text {
+  text-decoration: line-through;
+  text-decoration-color: rgba(22, 27, 38, 0.35);
+}
+
+.decision.replaced .decision-dot {
+  background: var(--ink-3);
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 980px) {

@@ -29,6 +29,10 @@ export type DecisionRecord = {
   createdAt: string;
   editedBy?: string;
   editedAt?: string;
+  /** The earlier decision this one replaced, after the team revisited it. */
+  replaces?: string;
+  /** The later decision that replaced this one. */
+  replacedBy?: string;
 };
 export type ChatRecord = {
   id: string;

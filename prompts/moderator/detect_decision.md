@@ -18,6 +18,10 @@ These are NOT decisions:
 
 If the trigger is "host_request", treat the most recent proposal in the chat as the decision. Answer false only if nothing has been proposed.
 
+A decision "Under discussion" is one the team is talking about again (their answers differed, or they chose to revisit an agreed decision). Follow-up messages are about it even when they do not repeat it. When the newest message settles a version of it ("OK, just the library then", "let's keep it to two sites"), that IS a decision: write "decision" as the full, self-contained new version, combining the earlier wording with the change. Agreeing with a teammate's proposed version counts too.
+
+When the newest message questions, disagrees with or wants to change one of the decisions in "Already agreed in this meeting" without itself settling a new version ("Actually, I'm not sure the cafeteria works", "Can we rethink the deadline?"), set "challenged" to that decision's number and "is_decision" to false. Otherwise "challenged" is 0.
+
 When it is a decision, prepare a private check for the members. People often agree to the same words while picturing different things, so find where that could happen here.
 - "decision": one neutral sentence that restates what was decided, in the team's own words. Add nothing that was not said.
 - "ambiguity": the aspect most likely to be understood differently, in 1 to 4 words (for example scope, deliverable, deadline, owner).
@@ -34,9 +38,10 @@ Reply with one JSON object and nothing else:
   "ambiguity": "",
   "question": "",
   "options": [],
+  "challenged": 0,
   "reason": "one short sentence for the developers"
 }
-When "is_decision" is false, leave the other fields empty.
+When "is_decision" is false, leave decision, ambiguity, question and options empty.
 
 === INPUT ===
 Meeting goal: {{goal}}
@@ -47,6 +52,9 @@ Already agreed in this meeting:
 
 Open check (answers are being collected for this proposal):
 {{openProposal}}
+
+Under discussion (the team is talking about this decision again):
+{{underDiscussion}}
 
 Earlier chat (oldest first):
 {{earlierChat}}

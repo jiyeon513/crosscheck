@@ -3,6 +3,7 @@ import type { RoomView } from "./api";
 import { formatMeetingTime, meetingStatus, type Decision, type Meeting, type MeetingStatus } from "./model";
 
 type Agreement = NonNullable<RoomView["agreement"]>;
+type Discussing = RoomView["discussing"];
 type Act = (action: string, body: object) => Promise<void>;
 
 export type Zone = {
@@ -29,9 +30,11 @@ export default function CurrentLog({
   dragging,
   flash,
   agreement,
+  discussing,
   isHost,
   act,
 }: {
+  discussing: Discussing;
   meeting: Meeting | null;
   decisions: Decision[];
   open: boolean;
@@ -94,6 +97,8 @@ export default function CurrentLog({
           <h3>Current agreement</h3>
           {agreement && agreement.status !== "cancelled" && agreement.status !== "aligned" ? (
             <AgreementBox agreement={agreement} isHost={isHost} act={act} />
+          ) : discussing ? (
+            <DiscussionBox discussing={discussing} />
           ) : (
             <p className="muted small-note">No open check.</p>
           )}
@@ -331,6 +336,24 @@ export function AgreementBox({
   );
 }
 
+/** A decision the team is talking about again, while no check is open. */
+export function DiscussionBox({ discussing }: { discussing: NonNullable<Discussing> }) {
+  return (
+    <div className="agreement discussing">
+      <p className="agreement-title">
+        <span className="agreement-dot" aria-hidden="true" />
+        {discussing.status === "asking" ? "Revisit this decision?" : "Under discussion"}
+      </p>
+      <p className="agreement-decision">{discussing.decision}</p>
+      <p className="agreement-meta">
+        {discussing.status === "asking"
+          ? "The Moderator asked the team in the chat whether to discuss it again."
+          : "When the team settles on a new version, say it in the chat and it is checked again."}
+      </p>
+    </div>
+  );
+}
+
 /** Agreed decisions. With `onEdit`, members can correct the wording; the agreed original is kept. */
 export function DecisionList({
   decisions,
@@ -376,7 +399,7 @@ function DecisionItem({
   }
 
   return (
-    <li className="decision">
+    <li className={decision.replacedBy ? "decision replaced" : "decision"}>
       <span className="decision-dot" aria-hidden="true" />
       <div className="decision-body">
         {editing ? (
@@ -403,8 +426,10 @@ function DecisionItem({
           <p className="decision-text">{decision.text}</p>
         )}
         <p className="decision-meta" title={decision.text !== decision.original ? `Agreed wording: ${decision.original}` : undefined}>
+          {decision.replacedBy ? "Replaced by a newer version · " : ""}
           {decision.agreed ? `Agreed ${decision.agreed}` : "Agreed"}
           {decision.editedBy ? ` · edited by ${decision.editedBy}` : ""}
+          {decision.replaces ? " · replaces an earlier decision" : ""}
         </p>
       </div>
       {onEdit && !editing ? (

@@ -23,6 +23,7 @@ import type {
   ConcernCard,
   DecisionDetection,
   DecisionRecord,
+  Discussion,
   GroupMessage,
   ModeratorNote,
   ModeratorToAgent,
@@ -69,6 +70,10 @@ export class Meeting {
   private anglesAsked: string[] = [];
   private userMsgsAtLastAngleRun = 0;
   private angleBusy = false;
+  /** A decision the team is talking about again (after a split check, or a questioned agreed decision). */
+  private discussing: Discussion | null = null;
+  /** Agreed decisions the team chose to keep when asked, and the group length at that moment. */
+  private kept = new Map<string, number>();
   private detection?: Promise<void>;
   private pendingDetection?: "new_message" | "host_request";
   private comparison?: { check: Check; inputs: string };
@@ -236,7 +241,7 @@ export class Meeting {
     if (!revised || revised === this.check.decision) throw new Error("Enter a revised proposal");
     const previous = this.decisions.find(record => record.checkId === checkId);
     if (previous) previous.supersededBy = this.check.version + 1;
-    await this.openCheck({ decision: revised, ...(await this.frame(user, revised)) });
+    await this.openCheck({ decision: revised, ...(await this.frame(user, revised)) }, previous?.id ?? this.check.replaces);
   }
 
   /** Host only: close the open check without a result (for example a false alarm). */
@@ -247,6 +252,7 @@ export class Meeting {
     check.status = "cancelled";
     this.closeCheckCards(check);
     this.stage = "ideation";
+    this.discussing = null;
     this.moderatorSays("The host closed this agreement check. Carry on.", { type: "check_closed" });
   }
 
@@ -258,7 +264,7 @@ export class Meeting {
     if (this.alreadyAgreed(proposal)) throw new Error("The team already agreed on this");
     this.addGroup(user, "user", `Proposal for the team: "${proposal}"`);
     this.log("user_to_group", `user:${user}`, "group", { proposal: true });
-    await this.openCheck({ decision: proposal, ...(await this.frame(user, proposal)) });
+    await this.openCheck({ decision: proposal, ...(await this.frame(user, proposal)) }, this.discussing?.recordId);
   }
 
   /** Ask the Moderator how members might read a given proposal (question + options). */
@@ -274,6 +280,7 @@ export class Meeting {
         trigger: "host_request",
         openProposal: null,
         agreed: this.agreedStatements(),
+        underDiscussion: this.discussing?.decision ?? null,
       }, this.llmLog("moderator"));
       return d.is_decision && d.options.length >= 2 ? { question: d.question, options: d.options } : fallback;
     } catch (error) {
@@ -346,6 +353,7 @@ export class Meeting {
           }
         : null,
       decisions: this.decisions,
+      discussing: this.discussing ? { ...this.discussing } : null,
       llm: llmInfo(),
     };
   }
@@ -446,24 +454,70 @@ export class Meeting {
       const previous = this.check;
       const open = this.checkOpen() ? this.check : null;
       const group = this.groupContext();
+      const agreed = this.agreedRecords();
       const d = await moderator.detectDecision(
-        { goal: this.goal, group, trigger, openProposal: open?.decision ?? null, agreed: this.agreedStatements() },
+        {
+          goal: this.goal, group, trigger, openProposal: open?.decision ?? null,
+          agreed: agreed.map((record) => record.statement), underDiscussion: this.discussing?.decision ?? null,
+        },
         this.llmLog("moderator"),
       );
-      if (!d.is_decision || this.check !== previous || this.group.length !== group.length) continue;
-      if (this.alreadyAgreed(d.decision)) continue;
+      if (this.check !== previous || this.group.length !== group.length) continue;
+      if (!d.is_decision) {
+        // Someone questions an agreed decision: ask the team first instead of reopening it.
+        if (d.challenged && !open) this.askToRevisit(agreed[d.challenged - 1]);
+        continue;
+      }
+      if (this.alreadyAgreed(d.decision)) {
+        // The team talked it over and kept the agreed wording: nothing left to revisit.
+        if (this.discussing?.recordId) this.discussing = null;
+        continue;
+      }
       if (open) {
         if (sameText(open.decision, d.decision)) continue;
         // Replace the open check only while few have answered; otherwise let it finish first.
         const answered = Object.keys(open.answers).length;
         if (trigger !== "host_request" && answered / open.askedOf.length >= this.rules.supersedeBelowAnswered) continue;
       }
-      await this.openCheck(d);
+      // A new version of a decision the team is revisiting replaces the agreed one once everyone agrees.
+      await this.openCheck(d, this.discussing?.recordId);
       this.pendingDetection = undefined;
     }
   }
 
-  private async openCheck(d: Pick<DecisionDetection, "decision" | "question" | "options">): Promise<void> {
+  /** The Moderator asks, without naming anyone, whether the team wants to revisit an agreed decision. */
+  private askToRevisit(record: DecisionRecord | undefined): void {
+    if (!record || this.discussing?.recordId === record.id) return;
+    const keptAt = this.kept.get(record.id);
+    if (keptAt !== undefined && this.group.length - keptAt < 5) return; // just chose to keep it
+    this.discussing = { decision: record.statement, status: "asking", recordId: record.id };
+    this.moderatorSays(
+      `It sounds like the team may want to revisit an agreed decision: "${record.statement}". Should we discuss it again?`,
+      { type: "reopen_prompt", recordId: record.id, decision: record.statement },
+    );
+  }
+
+  /** Any member answers the Moderator's "revisit this decision?" question. */
+  answerRevisit(user: string, recordId: string, reopen: boolean): void {
+    this.requireUser(user);
+    const asking = this.discussing;
+    if (!asking || asking.status !== "asking" || asking.recordId !== recordId) {
+      throw new Error("This question was already answered");
+    }
+    if (reopen) {
+      asking.status = "open";
+      this.moderatorSays(
+        `OK, let's revisit "${asking.decision}". When the team settles on a new version, say it here and I will check it with everyone. Until then the agreed version stands.`,
+        { type: "reopen_result", reopened: true },
+      );
+    } else {
+      this.kept.set(recordId, this.group.length);
+      this.discussing = null;
+      this.moderatorSays(`OK, "${asking.decision}" stays as agreed.`, { type: "reopen_result", reopened: false });
+    }
+  }
+
+  private async openCheck(d: Pick<DecisionDetection, "decision" | "question" | "options">, replaces?: string): Promise<void> {
     const previous = this.check;
     const replacing = previous?.status === "collecting";
     if (previous && replacing) previous.status = "cancelled";
@@ -487,13 +541,16 @@ export class Meeting {
       answers: Object.create(null),
       concerns: [],
       createdAt: this.now(),
+      ...(replaces ? { replaces } : {}),
     };
     this.check = check;
+    this.discussing = null;
     this.lastCompared = "";
     this.stage = "agreement";
     this.toAgents({ type: "check_request", checkId: check.id, decision: d.decision, question: d.question, options: d.options });
     this.moderatorSays(
-      `${replacing ? "Replacing the earlier check. " : ""}Agreement check${check.version > 1 ? ` (version ${check.version})` : ""}: ` +
+      `${replacing ? "Replacing the earlier check. " : ""}${replaces ? "New version of an agreed decision. " : ""}` +
+        `Agreement check${check.version > 1 ? ` (version ${check.version})` : ""}: ` +
         `"${d.decision}" Please answer privately in your own window.`,
       { type: "check_opened", version: check.version },
     );
@@ -548,10 +605,21 @@ export class Meeting {
         check.status = "aligned";
         // Record the exact proposal the users approved, never a model-generated paraphrase.
         check.statement = check.decision;
-        this.decisions.push({ id: this.nextId("decision"), checkId: check.id, version: check.version, statement: check.decision, at: this.now() });
+        const record: DecisionRecord = {
+          id: this.nextId("decision"), checkId: check.id, version: check.version, statement: check.decision, at: this.now(),
+          ...(check.replaces ? { replaces: check.replaces } : {}),
+        };
+        const earlier = check.replaces ? this.decisions.find((item) => item.id === check.replaces) : undefined;
+        if (earlier) {
+          earlier.replacedBy = record.id;
+          earlier.supersededBy ??= check.version;
+        }
+        this.decisions.push(record);
+        this.closeCheckCards(check); // answers can no longer change once it is agreed
+        this.discussing = null;
         // Back to ideas: the next topic can be brainstormed and decided in the same meeting.
         this.stage = "ideation";
-        this.moderatorSays(`Agreed ${approved}/${total}. ${check.decision}`, {
+        this.moderatorSays(`Agreed ${approved}/${total}. ${check.decision}${earlier ? " This replaces the earlier decision." : ""}`, {
           type: "agreed", agreed: approved, total, statement: check.decision,
         });
       } else {
@@ -563,6 +631,8 @@ export class Meeting {
         check.status = "mismatch";
         check.agreed = Math.min(sameReading, approved);
         this.closeCheckCards(check);
+        // Keep the proposal in mind: the next messages are about it, even when they do not repeat it.
+        this.discussing = { decision: check.decision, status: "open", ...(check.replaces ? { recordId: check.replaces } : {}) };
         const message = [
           `Agreement ${check.agreed}/${total}.`,
           res.anonymous_question,
@@ -584,9 +654,13 @@ export class Meeting {
   }
 
 
-  /** Statements the team agreed on in this meeting and that were not revised later. */
+  /** Decisions the team agreed on in this meeting and that were not replaced or revised later. */
+  private agreedRecords(): DecisionRecord[] {
+    return this.decisions.filter((record) => record.supersededBy === undefined && record.replacedBy === undefined);
+  }
+
   private agreedStatements(): string[] {
-    return this.decisions.filter((record) => record.supersededBy === undefined).map((record) => record.statement);
+    return this.agreedRecords().map((record) => record.statement);
   }
 
   private alreadyAgreed(text: string): boolean {
