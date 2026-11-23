@@ -135,3 +135,13 @@ test("a reply with both a concern and a draft keeps the concern instead of faili
   assert.deepEqual(result.concern, { label: "scope", draft: "Too big?" });
   assert.equal(result.share_draft, null);
 });
+
+test("any member, not only the host, can ask about an angle or ask for an agreement check", async () => {
+  const m = room();
+  await m.sendPrivateMessage("Taeho", "Wi-Fi access counts are public data.");
+  await m.requestAngle("Jiwoo", "using real campus data", "find_contribution");
+  assert.ok(cards(m, "Taeho").some((c) => c.kind === "share_suggestion" && c.source === "missing_angle"));
+  await m.postGroupMessage("Taeho", "How about a study app?");
+  await m.startCheck("Jiwoo");
+  assert.equal(m.check?.status, "collecting");
+});

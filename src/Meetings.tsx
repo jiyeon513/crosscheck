@@ -140,7 +140,7 @@ export default function CurrentLog({
         </section>
       </div>
 
-      {isHost ? <HostTools act={act} checking={checking} /> : null}
+      <ModeratorTools act={act} checking={checking} />
       <button className="past-link" type="button" onClick={onOpenGroup}>
         Schedule & past decision logs ›
       </button>
@@ -149,8 +149,8 @@ export default function CurrentLog({
   );
 }
 
-/** Host-only shortcuts to the Moderator. */
-function HostTools({ act, checking }: { act: Act; checking: boolean }) {
+/** Shortcuts to the Moderator that any member can use. */
+function ModeratorTools({ act, checking }: { act: Act; checking: boolean }) {
   const [angle, setAngle] = useState("");
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -173,7 +173,7 @@ function HostTools({ act, checking }: { act: Act; checking: boolean }) {
 
   return (
     <div className="host-tools">
-      <span className="host-label">Host</span>
+      <span className="host-label">Ask the Moderator</span>
       {asking ? (
         <form
           className="angle-form"

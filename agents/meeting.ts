@@ -222,9 +222,9 @@ export class Meeting {
     if (check.askedOf.every((p) => check.answers[p])) await this.runCompare();
   }
 
-  /** Host only: check agreement now, without waiting for the moderator to spot a decision. */
+  /** Any member: check agreement now, without waiting for the moderator to spot a decision. */
   async startCheck(user: string): Promise<void> {
-    this.requireHost(user);
+    this.requireUser(user);
     if (this.checkOpen()) throw new Error("A check is already open");
     await this.runDetect("host_request");
   }
@@ -282,8 +282,9 @@ export class Meeting {
     }
   }
 
+  /** Any member: ask every personal agent, privately, about an angle the team has not covered. */
   async requestAngle(user: string, angle: string, intent: "find_contribution" | "invite_brainstorm"): Promise<void> {
-    this.requireHost(user);
+    this.requireUser(user);
     if (!angle.trim()) throw new Error("An angle is required");
     await this.askAboutAngle(angle.trim(), intent).catch(() => { throw new PersonalAgentUnavailable("Unable to complete the private angle checks. Please retry."); });
   }

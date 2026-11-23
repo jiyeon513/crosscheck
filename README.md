@@ -51,7 +51,7 @@ Browser (src/)                    Server (server/)                         Agent
 
 - A room is the group's **current meeting** (today's, else the next one). It starts from the group's recent chat, so the agents keep the context of earlier meetings.
 - Only the Moderator adds to a decision log, after everyone agrees. Members can correct the wording later; the agreed original is kept. Dropping a message on the decision log proposes it, and the Moderator opens an agreement check.
-- Room actions: `group`, `private`, `share`, `concern`, `dismiss`, `propose`, `angle` (host), `check/answer`, `check/start` (host), `check/compare` (host), `check/revise` (host), `check/cancel` (host). See `server/index.ts`.
+- Room actions: `group`, `private`, `share`, `concern`, `dismiss`, `propose`, `angle`, `check/answer`, `check/start`, `check/compare` (host), `check/revise` (host), `check/cancel` (host). See `server/index.ts`.
 
 ### What happens in a meeting
 
@@ -60,7 +60,7 @@ Browser (src/)                    Server (server/)                         Agent
 | A member writes in their private window | Their agent | Replies. It may offer a draft to share or a concern card. |
 | A teammate posts in the team chat | The other members' agents | If the post connects to something the member said before, suggest a reply draft, privately. Paused while a check collects answers; at most one open suggestion per member. |
 | Any new team message | Moderator | Is the team settling on a decision? If yes, everyone gets a private agreement check and the Moderator says so in the chat. A new decision replaces an open check that fewer than half have answered. |
-| Team chat quiet for 60 s while brainstorming | Moderator, then the agents | The Moderator names a missing angle. Agents whose member has a related thought suggest sharing it. If nobody has one, the Moderator asks the team. The host can also ask about an angle directly. |
+| Team chat quiet for 60 s while brainstorming | Moderator, then the agents | The Moderator names a missing angle. Agents whose member has a related thought suggest sharing it. If nobody has one, the Moderator asks the team. Any member can also ask about an angle directly, or ask the Moderator to check agreement now. |
 | Everyone answered | Moderator | Compares answers without names. Same reading from everyone: "Agreed n/n" and it goes into the decision log. Otherwise: "Agreement k/n", one anonymous question, and what to do next. The next decision stated in the chat opens a new version; the host can also revise it or close the check. |
 
 Timing numbers live in `agents/rules.ts`.
