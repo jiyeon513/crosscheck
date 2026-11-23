@@ -16,9 +16,18 @@ export class ApiError extends Error {
 const TOKEN_KEY = "crosscheck.session";
 let signedOut: () => void = () => {};
 
+// A tab keeps its own login. localStorage is shared by every window on this
+// browser, so a second login used to replace the first and both windows then
+// loaded the same personal-agent thread.
 export function getToken() {
   try {
-    return localStorage.getItem(TOKEN_KEY) ?? "";
+    const own = sessionStorage.getItem(TOKEN_KEY);
+    if (own) return own;
+    const shared = localStorage.getItem(TOKEN_KEY);
+    if (!shared) return "";
+    sessionStorage.setItem(TOKEN_KEY, shared);
+    localStorage.removeItem(TOKEN_KEY);
+    return shared;
   } catch {
     return "";
   }
@@ -26,8 +35,9 @@ export function getToken() {
 
 function setToken(token: string) {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
   } catch {
     // Without storage the session lasts until the page closes.
   }

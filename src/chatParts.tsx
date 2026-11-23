@@ -1,5 +1,15 @@
 // Pieces shared by the team chat and the private window: bubbles, composer, drag and drop.
-import { useLayoutEffect, useRef, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Avatar } from "./ui";
 
 export type Source = "team" | "agent" | "user";
@@ -69,6 +79,10 @@ export function Bubble({
   const dragText = shownText || quote?.text || text;
 
   function dragStart(event: DragEvent) {
+    if ((event.target as HTMLElement).closest?.(".quote-card")) {
+      event.preventDefault();
+      return;
+    }
     carried = { from, author, text: dragText, messageId };
     event.dataTransfer.setData("application/x-crosscheck", JSON.stringify(carried));
     event.dataTransfer.setData("text/plain", dragText);
@@ -117,20 +131,102 @@ export function Bubble({
             ⋮⋮
           </span>
           {label ? <p className="bubble-label">{label}</p> : null}
-          {quote ? (
-            <div className="quote-card">
-              <div>
-                <p className="quote-author">↪ {quote.author}</p>
-                <p className="quote-text">{quote.text}</p>
-              </div>
-            </div>
-          ) : null}
+          {quote ? <QuoteCard author={quote.author} text={quote.text} /> : null}
           {shownText ? <p className="bubble-text">{shownText}</p> : null}
           {footer}
         </div>
       </div>
     </article>
   );
+}
+
+/** A quoted card. Long text is clamped; clicking it shows the original in full. */
+function QuoteCard({
+  author,
+  text,
+  label = "↪",
+  attached = false,
+  onClear,
+}: {
+  author: string;
+  text: string;
+  label?: string;
+  attached?: boolean;
+  onClear?: () => void;
+}) {
+  const textRef = useRef<HTMLParagraphElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [truncated, setTruncated] = useState(false);
+  const expandable = truncated || open;
+
+  useLayoutEffect(() => {
+    const node = textRef.current;
+    if (!node) return;
+    const measure = () => {
+      if (open) return;
+      setTruncated(node.scrollHeight > node.clientHeight + 1);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [text, open]);
+
+  function toggle(event: MouseEvent | ReactKeyboardEvent) {
+    if (!expandable) return;
+    event.stopPropagation();
+    setOpen((value) => !value);
+  }
+
+  return (
+    <div className={["quote-card", attached ? "attached" : "", open ? "open" : ""].filter(Boolean).join(" ")}>
+      <div
+        className={expandable ? "quote-body expandable" : "quote-body"}
+        onClick={expandable ? toggle : undefined}
+        onKeyDown={
+          expandable
+            ? (event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                toggle(event);
+              }
+            : undefined
+        }
+        role={expandable ? "button" : undefined}
+        tabIndex={expandable ? 0 : undefined}
+        aria-expanded={expandable ? open : undefined}
+        title={truncated && !open ? "Show full text" : undefined}
+      >
+        <p className="quote-author">
+          {label} {author}
+        </p>
+        <p ref={textRef} className="quote-text">
+          {text}
+        </p>
+      </div>
+      {onClear ? (
+        <button className="icon-btn small" type="button" onClick={onClear} aria-label="Remove attachment">
+          ×
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Plain text pasted onto the conversation, rather than into the text box, still lands in the draft. */
+export function pasteToDraft(event: ClipboardEvent<HTMLElement>, apply: (text: string) => void) {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest("textarea, input")) return;
+  const text = event.clipboardData.getData("text/plain");
+  if (!text) return;
+  event.preventDefault();
+  apply(text);
+}
+
+export function joinDraft(current: string, text: string) {
+  if (!current) return text;
+  if (current.endsWith("\n") || text.startsWith("\n")) return current + text;
+  return `${current}\n${text}`;
 }
 
 export function Composer({
@@ -153,7 +249,7 @@ export function Composer({
   tone: "team" | "agent";
   active: boolean;
   over: boolean;
-  zone: Zone;
+  zone?: Zone;
   quote: Quote | null;
   quoteLabel?: string;
   onClearQuote: () => void;
@@ -170,17 +266,13 @@ export function Composer({
   return (
     <form className={className} onSubmit={onSubmit} {...zone}>
       {quote ? (
-        <div className="quote-card attached">
-          <div>
-            <p className="quote-author">
-              {quoteLabel ?? "↪"} {quote.author}
-            </p>
-            <p className="quote-text">{quote.text}</p>
-          </div>
-          <button className="icon-btn small" type="button" onClick={onClearQuote} aria-label="Remove attachment">
-            ×
-          </button>
-        </div>
+        <QuoteCard
+          author={quote.author}
+          text={quote.text}
+          label={quoteLabel ?? "↪"}
+          attached
+          onClear={onClearQuote}
+        />
       ) : null}
       <div className="composer-row">
         <GrowingInput

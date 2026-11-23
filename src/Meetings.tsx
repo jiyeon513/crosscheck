@@ -102,38 +102,45 @@ export default function CurrentLog({
         </div>
       ) : null}
 
-      {agreement && agreement.status !== "cancelled" ? (
-        <AgreementBox agreement={agreement} isHost={isHost} act={act} />
-      ) : null}
+      <div className="log-split">
+        <section className="log-current">
+          <h3>Current agreement</h3>
+          {agreement && agreement.status !== "cancelled" && agreement.status !== "aligned" ? (
+            <AgreementBox agreement={agreement} isHost={isHost} act={act} />
+          ) : (
+            <p className="muted small-note">No check is open. A disagreement stays here until everyone agrees.</p>
+          )}
+        </section>
 
-      <div className="thread">
-        {!meeting && !scheduling ? (
-          <div className="empty">
-            <p>No meeting today or coming up. Schedule one to start its decision log.</p>
-            <button className="btn small schedule-btn" type="button" onClick={() => setScheduling(true)}>
-              + Schedule a meeting
-            </button>
-          </div>
-        ) : null}
-        {!meeting && scheduling ? (
-          <ScheduleForm
-            onCancel={() => setScheduling(false)}
-            onSubmit={async (title, startsAt) => {
-              await onSchedule(title, startsAt);
-              setScheduling(false);
-            }}
-          />
-        ) : null}
-        {meeting && decisions.length === 0 ? (
-          <div className="empty">
-            <p>Nothing agreed yet.</p>
-            <p className="small-note">
-              When the team settles something in the chat, the Moderator checks that everyone read it the same way and
-              records it here. To propose something yourself, drag a message onto this panel.
-            </p>
-          </div>
-        ) : null}
-        {decisions.length > 0 ? <DecisionList decisions={decisions} onEdit={onEdit} /> : null}
+        <section className="log-agreed">
+          <h3>Agreed</h3>
+          {!meeting && !scheduling ? (
+            <div className="empty">
+              <p>No meeting today or coming up. Schedule one to start its decision log.</p>
+              <button className="btn small schedule-btn" type="button" onClick={() => setScheduling(true)}>
+                + Schedule a meeting
+              </button>
+            </div>
+          ) : null}
+          {!meeting && scheduling ? (
+            <ScheduleForm
+              onCancel={() => setScheduling(false)}
+              onSubmit={async (title, startsAt) => {
+                await onSchedule(title, startsAt);
+                setScheduling(false);
+              }}
+            />
+          ) : null}
+          {decisions.length === 0 && meeting ? (
+            <div className="empty">
+              <p>Nothing agreed yet.</p>
+              <p className="small-note">
+                A proposal stays above until everyone reads it the same way. Then it is recorded here.
+              </p>
+            </div>
+          ) : null}
+          {decisions.length > 0 ? <DecisionList decisions={decisions} onEdit={onEdit} /> : null}
+        </section>
       </div>
 
       {isHost ? <HostTools act={act} checking={checking} /> : null}
@@ -338,9 +345,10 @@ export function DecisionList({
   decisions: Decision[];
   onEdit?: (id: string, text: string) => Promise<void>;
 }) {
+  const newestFirst = decisions.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (
     <ol className="decision-list">
-      {decisions.map((decision) => (
+      {newestFirst.map((decision) => (
         <DecisionItem key={decision.id} decision={decision} onEdit={onEdit} />
       ))}
     </ol>

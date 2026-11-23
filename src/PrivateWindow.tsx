@@ -10,7 +10,7 @@ import type {
 } from "../agents/protocol";
 import type { RoomView } from "./api";
 import { isUnsure } from "./model";
-import { Bubble, Composer, Typing, type Source, type Zone } from "./chatParts";
+import { Bubble, Composer, Typing, joinDraft, pasteToDraft, type Source, type Zone } from "./chatParts";
 
 /** What the next private message refers to. */
 export type AgentReference =
@@ -95,57 +95,68 @@ export default function PrivateWindow({
           </div>
         </div>
       </header>
-      <div className="thread">
-        {items.length === 0 && local.length === 0 ? (
-          <div className="empty">
-            <p>Think out loud here. Your agent reads the team chat and only shows you its suggestions.</p>
-          </div>
-        ) : null}
-        {items.map((item) => (
-          <PrivateEntry
-            key={item.id}
-            item={item}
-            me={me}
-            act={act}
-            onAsk={(card) => onReference(card)}
-            onDragState={onDragState}
-          />
-        ))}
-        {local.map((item) =>
-          item.type === "user" ? (
-            <Bubble key={item.id} from="user" mine author={me} text={item.text} onDragState={onDragState} />
-          ) : (
-            <Bubble
+      <div
+        className={["panel-stream", active ? "drop-target" : "", over ? "over" : ""].filter(Boolean).join(" ")}
+        tabIndex={-1}
+        {...zone}
+        onClick={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest("textarea, input, button, a, .quote-card")) return;
+          event.currentTarget.focus({ preventScroll: true });
+        }}
+        onPaste={(event) => pasteToDraft(event, (text) => setDraft((current) => joinDraft(current, text)))}
+      >
+        <div className="thread">
+          {items.length === 0 && local.length === 0 ? (
+            <div className="empty">
+              <p>Think out loud here. Your agent reads the team chat and only shows you its suggestions.</p>
+            </div>
+          ) : null}
+          {items.map((item) => (
+            <PrivateEntry
               key={item.id}
-              from="agent"
-              author="Agent"
-              label="Agent unavailable"
-              text={item.text}
-              variant="failed"
+              item={item}
+              me={me}
+              act={act}
+              onAsk={(card) => onReference(card)}
               onDragState={onDragState}
             />
-          ),
-        )}
-        {typing ? <Typing label="Personal agent is thinking" /> : null}
-        <div ref={end} />
+          ))}
+          {local.map((item) =>
+            item.type === "user" ? (
+              <Bubble key={item.id} from="user" mine author={me} text={item.text} onDragState={onDragState} />
+            ) : (
+              <Bubble
+                key={item.id}
+                from="agent"
+                author="Agent"
+                label="Agent unavailable"
+                text={item.text}
+                variant="failed"
+                onDragState={onDragState}
+              />
+            ),
+          )}
+          {typing ? <Typing label="Personal agent is thinking" /> : null}
+          <div ref={end} />
+        </div>
+        <Composer
+          tone="agent"
+          active={active}
+          over={over}
+          quote={reference ? { author: reference.author, text: reference.text } : null}
+          quoteLabel={reference?.kind === "card" ? "About" : "↪"}
+          onClearQuote={() => onReference(null)}
+          value={draft}
+          onChange={setDraft}
+          onSubmit={send}
+          placeholder="Ask your personal agent..."
+          quotePlaceholder="Ask about it (optional)"
+          canSend={draft.trim().length > 0 || reference !== null}
+          busy={sending}
+          dropLabel="Drop to ask your agent about it"
+        />
       </div>
-      <Composer
-        tone="agent"
-        active={active}
-        over={over}
-        zone={zone}
-        quote={reference ? { author: reference.author, text: reference.text } : null}
-        quoteLabel={reference?.kind === "card" ? "About" : "↪"}
-        onClearQuote={() => onReference(null)}
-        value={draft}
-        onChange={setDraft}
-        onSubmit={send}
-        placeholder="Ask your personal agent..."
-        quotePlaceholder="Ask about it (optional)"
-        canSend={draft.trim().length > 0 || reference !== null}
-        busy={sending}
-        dropLabel="Drop to ask your agent about it"
-      />
     </section>
   );
 }

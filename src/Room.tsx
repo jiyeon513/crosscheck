@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import type { GroupMessage } from "../agents/protocol";
 import { api, Logo } from "./api";
-import { Bubble, Composer, People, clearCarried, readDrop, type Quote, type Source } from "./chatParts";
+import { Bubble, Composer, People, clearCarried, joinDraft, pasteToDraft, readDrop, type Quote, type Source } from "./chatParts";
 import CurrentLog from "./Meetings";
 import { currentMeeting, formatMeetingTime, type GroupDetail, type Meeting } from "./model";
 import PrivateWindow, { type AgentReference } from "./PrivateWindow";
@@ -223,49 +223,66 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
             </div>
             <People people={people} />
           </header>
-          <div className="thread">
-            {timeline.length === 0 ? (
-              <p className="empty">Say hello to the team.</p>
-            ) : (
-              timeline.map((item) =>
-                item.kind === "meeting" ? (
-                  <div
-                    key={`m-${item.meeting.id}`}
-                    className={current?.id === item.meeting.id ? "meeting-divider on" : "meeting-divider"}
-                  >
-                    <span>
-                      {item.meeting.title} · {formatMeetingTime(item.meeting.startsAt)}
-                    </span>
-                  </div>
-                ) : (
-                  <TeamLine
-                    key={item.line.id}
-                    line={item.line}
-                    mine={item.line.kind === "user" && !item.line.anonymous && item.line.author === me}
-                    exploring={exploring === item.line.id}
-                    onExplore={() => void explore(item.line)}
-                    onDragState={onDragState}
-                  />
-                ),
-              )
-            )}
-            <div ref={teamEnd} />
+          <div
+            className={[
+              "panel-stream",
+              dragging !== null && dragging !== "team" ? "drop-target" : "",
+              over === "team" ? "over" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            tabIndex={-1}
+            {...dropZone("team")}
+            onClick={(event) => {
+              const target = event.target as HTMLElement;
+              if (target.closest("textarea, input, button, a, .quote-card")) return;
+              event.currentTarget.focus({ preventScroll: true });
+            }}
+            onPaste={(event) => pasteToDraft(event, (text) => setTeamDraft((current) => joinDraft(current, text)))}
+          >
+            <div className="thread">
+              {timeline.length === 0 ? (
+                <p className="empty">Say hello to the team.</p>
+              ) : (
+                timeline.map((item) =>
+                  item.kind === "meeting" ? (
+                    <div
+                      key={`m-${item.meeting.id}`}
+                      className={current?.id === item.meeting.id ? "meeting-divider on" : "meeting-divider"}
+                    >
+                      <span>
+                        {item.meeting.title} · {formatMeetingTime(item.meeting.startsAt)}
+                      </span>
+                    </div>
+                  ) : (
+                    <TeamLine
+                      key={item.line.id}
+                      line={item.line}
+                      mine={item.line.kind === "user" && !item.line.anonymous && item.line.author === me}
+                      exploring={exploring === item.line.id}
+                      onExplore={() => void explore(item.line)}
+                      onDragState={onDragState}
+                    />
+                  ),
+                )
+              )}
+              <div ref={teamEnd} />
+            </div>
+            <Composer
+              tone="team"
+              active={dragging !== null && dragging !== "team"}
+              over={over === "team"}
+              quote={teamQuote}
+              onClearQuote={() => setTeamQuote(null)}
+              value={teamDraft}
+              onChange={setTeamDraft}
+              onSubmit={sendTeam}
+              placeholder={view ? `Message the team as ${me}...` : "Connecting..."}
+              canSend={Boolean(view) && (teamDraft.trim().length > 0 || teamQuote !== null)}
+              busy={sendingTeam}
+              dropLabel="Drop to reply to it"
+            />
           </div>
-          <Composer
-            tone="team"
-            active={dragging !== null && dragging !== "team"}
-            over={over === "team"}
-            zone={dropZone("team")}
-            quote={teamQuote}
-            onClearQuote={() => setTeamQuote(null)}
-            value={teamDraft}
-            onChange={setTeamDraft}
-            onSubmit={sendTeam}
-            placeholder={view ? `Message the team as ${me}...` : "Connecting..."}
-            canSend={Boolean(view) && (teamDraft.trim().length > 0 || teamQuote !== null)}
-            busy={sendingTeam}
-            dropLabel="Drop to reply to it"
-          />
         </section>
 
         <CurrentLog
