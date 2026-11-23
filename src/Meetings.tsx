@@ -58,20 +58,8 @@ export default function CurrentLog({
   ].join(" ");
   const dropLabel = "Drop to propose it for an agreement check";
 
-  if (!open) {
-    return (
-      <section className={panelClass} {...zone}>
-        <button className="log-rail" type="button" onClick={onToggle} aria-label="Expand decision log" aria-expanded="false">
-          <span className="rail-icon" aria-hidden="true">
-            ✓
-          </span>
-          <span className="count">{decisions.length}</span>
-          <span className="rail-label">Decision log{meeting ? ` · ${meeting.title}` : ""}</span>
-        </button>
-        <DropOverlay label={dropLabel} />
-      </section>
-    );
-  }
+  // Closed: the panel is gone; the "Decision log" button in the team chat header opens it.
+  if (!open) return null;
 
   const checking = agreement?.status === "collecting";
 
@@ -84,8 +72,8 @@ export default function CurrentLog({
           </h2>
           <p>Recorded by the Moderator when everyone agrees</p>
         </div>
-        <button className="icon-btn" type="button" onClick={onToggle} aria-label="Collapse decision log" aria-expanded="true" title="Collapse">
-          ⇥
+        <button className="icon-btn" type="button" onClick={onToggle} aria-label="Close decision log" aria-expanded="true" title="Close">
+          ×
         </button>
       </header>
 
@@ -219,7 +207,18 @@ function ModeratorTools({ act, checking }: { act: Act; checking: boolean }) {
 }
 
 /** The Moderator's agreement check as everyone sees it. Who answered what is never shown. */
-function AgreementBox({ agreement, isHost, act }: { agreement: Agreement; isHost: boolean; act: Act }) {
+export function AgreementBox({
+  agreement,
+  isHost,
+  act,
+  inline = false,
+}: {
+  agreement: Agreement;
+  isHost: boolean;
+  act: Act;
+  /** Shown under the Moderator's message in the team chat. */
+  inline?: boolean;
+}) {
   const [revising, setRevising] = useState(false);
   const [revision, setRevision] = useState(agreement.decision);
   const [busy, setBusy] = useState(false);
@@ -248,7 +247,7 @@ function AgreementBox({ agreement, isHost, act }: { agreement: Agreement; isHost
         : `Not agreed yet · Agreement ${agreement.agreed ?? 0}/${total}`;
 
   return (
-    <div className={`agreement ${status}`}>
+    <div className={`agreement ${status}${inline ? " inline" : ""}`}>
       <p className="agreement-title">
         <span className="agreement-dot" aria-hidden="true" />
         {title}

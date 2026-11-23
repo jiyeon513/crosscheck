@@ -5,9 +5,9 @@
 // the signed-in member's own view of the room.
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import type { GroupMessage } from "../agents/protocol";
-import { api, Logo } from "./api";
+import { api, Logo, type RoomView } from "./api";
 import { Bubble, Composer, People, clearCarried, joinDraft, pasteToDraft, readDrop, type Quote, type Source } from "./chatParts";
-import CurrentLog from "./Meetings";
+import CurrentLog, { AgreementBox } from "./Meetings";
 import { currentMeeting, formatMeetingTime, type GroupDetail, type Meeting } from "./model";
 import PrivateWindow, { type AgentReference } from "./PrivateWindow";
 import { Avatar } from "./ui";
@@ -15,7 +15,8 @@ import { useRoom } from "./useRoom";
 
 type Target = "team" | "agent" | "log";
 
-const LOG_OPEN_KEY = "crosscheck.logOpen";
+/** Closed by default; the "Decision log" button in the team chat header opens it. */
+const LOG_OPEN_KEY = "crosscheck.logOpen.v2";
 const GROUP_POLL_MS = 20_000;
 
 export default function Room({ code, me, onBack }: { code: string; me: string; onBack: () => void }) {
@@ -31,9 +32,9 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
   const [copied, setCopied] = useState(false);
   const [logOpen, setLogOpen] = useState(() => {
     try {
-      return localStorage.getItem(LOG_OPEN_KEY) !== "0";
+      return localStorage.getItem(LOG_OPEN_KEY) === "1";
     } catch {
-      return true;
+      return false;
     }
   });
   const [flash, setFlash] = useState(false);
@@ -221,7 +222,34 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
               <h2>Team conversation</h2>
               <p>{current ? `${current.title} · ` : ""}Moderator is listening</p>
             </div>
-            <People people={people} />
+            <div className="team-head-actions">
+              <People people={people} />
+              <button
+                className={[
+                  "log-toggle",
+                  logOpen ? "on" : "",
+                  flash ? "flash" : "",
+                  !logOpen && dragging !== null ? "drop-ready" : "",
+                  !logOpen && over === "log" ? "over" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                type="button"
+                onClick={toggleLog}
+                aria-expanded={logOpen}
+                title={logOpen ? "Hide the decision log" : "Show the decision log (drop a message here to propose it)"}
+                {...(!logOpen ? dropZone("log") : {})}
+              >
+                <span className="log-toggle-icon" aria-hidden="true">
+                  ✓
+                </span>
+                Decision log
+                <span className="count">{log.length}</span>
+                {view?.agreement?.status === "collecting" ? (
+                  <span className="log-toggle-live" aria-label="An agreement check is open" />
+                ) : null}
+              </button>
+            </div>
           </header>
           <div
             className={[
@@ -258,6 +286,9 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
                     <TeamLine
                       key={item.line.id}
                       line={item.line}
+                      agreement={view?.agreement ?? null}
+                      isHost={Boolean(view?.isHost)}
+                      act={room.act}
                       mine={item.line.kind === "user" && !item.line.anonymous && item.line.author === me}
                       exploring={exploring === item.line.id}
                       onExplore={() => void explore(item.line)}
@@ -333,23 +364,34 @@ const NOTE_LABEL: Record<string, string> = {
 
 function TeamLine({
   line,
+  agreement,
+  isHost,
+  act,
   mine,
   exploring,
   onExplore,
   onDragState,
 }: {
   line: GroupMessage;
+  agreement: RoomView["agreement"];
+  isHost: boolean;
+  act: (action: string, body: object) => Promise<void>;
   mine: boolean;
   exploring: boolean;
   onExplore: () => void;
   onDragState: (from: Source | null) => void;
 }) {
   const note = line.note;
+  // The Moderator's "Agreement check" message carries the live status of that check, as in the decision log.
+  const liveCheck =
+    note?.type === "check_opened" && agreement && agreement.version === note.version && agreement.status !== "cancelled";
   const footer =
     note?.type === "angle_prompt" ? (
       <button className="bubble-action" type="button" onClick={onExplore} disabled={exploring}>
         {exploring ? "Asking your agent..." : "◇ Think about it privately"}
       </button>
+    ) : liveCheck ? (
+      <AgreementBox agreement={agreement} isHost={isHost} act={act} inline />
     ) : null;
   const label = note
     ? note.type === "angle_prompt"
