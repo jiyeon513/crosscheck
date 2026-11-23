@@ -34,7 +34,9 @@ function createRoom(code: string, meetingId: string, host: string): Room {
   const group = store.db.groups[code];
   const scheduled = findMeeting(code, meetingId);
   const goal = scheduled ? `${scheduled.title} (${group.title})` : group.title;
-  const meeting = new Meeting({ id: `${code}.${meetingId}`, goal, host });
+  // CROSSCHECK_SILENCE_MS shortens the silence before the Moderator looks for a missing angle (demos).
+  const silenceMs = Number(process.env.CROSSCHECK_SILENCE_MS) || undefined;
+  const meeting = new Meeting({ id: `${code}.${meetingId}`, goal, host, ...(silenceMs ? { rules: { silenceMs } } : {}) });
 
   // Earlier team chat is context for the agents, not new ideas for this meeting.
   const history = (store.db.chats[code] ?? []).slice(-HISTORY);
