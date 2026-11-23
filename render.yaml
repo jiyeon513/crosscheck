@@ -1,9 +1,12 @@
-# Render Blueprint: New > Blueprint, pick this repository, then fill in OPENROUTER_API_KEY.
+# Render Blueprint (free plan): New > Blueprint, pick this repository, then fill in OPENROUTER_API_KEY.
+# The free plan has no persistent disk: accounts, groups and chats are lost when the service
+# restarts, sleeps (after ~15 min idle) or redeploys. For lasting data, use a paid plan with the
+# disk block below, or move server/store.ts to a hosted database.
 services:
   - type: web
     name: crosscheck
     runtime: docker
-    plan: starter          # a persistent disk needs a paid plan; see README for the free option
+    plan: free
     healthCheckPath: /api/health
     envVars:
       - key: OPENROUTER_API_KEY
@@ -16,7 +19,8 @@ services:
         value: low
       - key: DATA_DIR
         value: /data
-    disk:
-      name: crosscheck-data
-      mountPath: /data
-      sizeGB: 1
+    # Paid plans only:
+    # disk:
+    #   name: crosscheck-data
+    #   mountPath: /data
+    #   sizeGB: 1

@@ -5,8 +5,8 @@
   --line: #e4e7ec;
   --line-strong: #d0d5dd;
   --ink: #161b26;
-  --ink-2: #475467;
-  --ink-3: #8a94a6;
+  --ink-2: #3f4858;
+  --ink-3: #6b7486;
   --brand: #1f7a52;
   --brand-ink: #ffffff;
   --brand-soft: #e8f4ee;
@@ -2363,6 +2363,99 @@ button.schedule-row.past:hover {
   }
 }
 
+/* ---------- Readability and page identity ---------- */
+
+/* Slightly larger small print everywhere. */
+.panel-head p,
+.decision-meta,
+.bubble-author,
+.pcard-ask,
+.fine-left,
+.small-note,
+.quote-author,
+.row-count,
+.meeting-info > span {
+  font-size: 12.5px;
+}
+
+.decision-text {
+  font-size: 14px;
+}
+
+/* Page title next to the logo. */
+.page-title {
+  padding-left: 12px;
+  border-left: 1px solid var(--line-strong);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+/* My space: the member's own groups. */
+.screen.space-home {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(31, 122, 82, 0.16), transparent 70%),
+    linear-gradient(180deg, #eef7f2 0%, var(--bg) 340px);
+}
+
+.space-home .page-title {
+  color: var(--brand);
+}
+
+/* Group home: one group's schedule and decision logs. */
+.screen.space-group {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(183, 121, 31, 0.16), transparent 70%),
+    linear-gradient(180deg, #fbf5ea 0%, var(--bg) 340px);
+}
+
+.space-group .page-title {
+  color: #8a5a12;
+}
+
+/* Group home decision logs: a little larger to read. */
+.logs-col .section-head h2 {
+  font-size: 17px;
+}
+
+.logs-col .section-head .muted {
+  font-size: 13.5px;
+}
+
+.log-card {
+  padding: 16px;
+}
+
+.log-card-head .meeting-info strong {
+  font-size: 15px;
+}
+
+.log-card .decision {
+  padding: 10px 12px;
+}
+
+.log-card .decision-text {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.log-card .decision-meta {
+  font-size: 13px;
+}
+
+.log-card .decision-dot {
+  margin-top: 8px;
+}
+
+.log-card .small-note {
+  font-size: 13.5px;
+}
+
+.schedule-card .meeting-info strong {
+  font-size: 14px;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 980px) {
@@ -2407,6 +2500,10 @@ button.schedule-row.past:hover {
 
   .room-header .me {
     display: none;
+  }
+
+  .page-title {
+    font-size: 14px;
   }
 }
 

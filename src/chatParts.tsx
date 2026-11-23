@@ -316,7 +316,7 @@ export function GrowingInput({
     box.style.height = `${Math.min(box.scrollHeight, 132)}px`;
   }, [value]);
 
-  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function onKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();

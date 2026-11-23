@@ -38,7 +38,7 @@ export default function GroupPage({
     return (
       <main className="screen scroll">
         <header className="app-header">
-          <BackButton onClick={onBack} label="Groups" />
+          <BackButton onClick={onBack} label="My space" />
         </header>
         <section className="page">{error ? <p className="error">{error}</p> : <p className="muted">Loading...</p>}</section>
       </main>
@@ -81,11 +81,12 @@ export default function GroupPage({
   }
 
   return (
-    <main className="screen scroll">
+    <main className="screen scroll space-group">
       <header className="app-header">
         <div className="header-actions">
-          <BackButton onClick={onBack} label="Groups" />
+          <BackButton onClick={onBack} label="My space" />
           <Logo />
+          <span className="page-title">Group home</span>
         </div>
         <span className="me">
           <Avatar name={me} />
@@ -189,7 +190,7 @@ export default function GroupPage({
           <section className="logs-col">
             <header className="section-head plain">
               <h2>Decision logs</h2>
-              <p className="muted">What the team agreed on, meeting by meeting. You can fix the wording.</p>
+              <p className="muted">What the team agreed on, by meeting</p>
             </header>
             {logged.length === 0 && loose.length === 0 ? (
               <div className="card empty-card">

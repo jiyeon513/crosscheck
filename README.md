@@ -35,7 +35,7 @@ OPENROUTER_API_KEY=... DATA_DIR=/var/lib/crosscheck PORT=8787 npm start
 
 Or with Docker: `docker build -t crosscheck .` then `docker run -p 8787:8787 -e OPENROUTER_API_KEY=... -v crosscheck-data:/data crosscheck`.
 
-**Render** (`render.yaml`): in the Render dashboard choose New → Blueprint, pick this repository, and enter `OPENROUTER_API_KEY` when asked. The Blueprint uses the Starter plan because it mounts a disk at `/data`. On the free plan, remove the `disk` block and the plan line: the app works, but accounts and chats are lost whenever the service restarts or redeploys.
+**Render** (`render.yaml`): in the Render dashboard choose New → Blueprint, pick this repository, and enter `OPENROUTER_API_KEY` when asked. The Blueprint uses the free plan, which has no persistent disk: accounts and chats are lost whenever the service restarts, sleeps after about 15 idle minutes, or redeploys. For lasting data, switch to a paid plan and uncomment the `disk` block.
 
 Any host that runs a Docker image or a Node 20+ process with a writable folder works the same way (Railway, Fly.io, a VM).
 

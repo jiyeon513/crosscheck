@@ -29,9 +29,12 @@ export default function Home({
   }, []);
 
   return (
-    <main className="screen scroll">
+    <main className="screen scroll space-home">
       <header className="app-header">
-        <Logo />
+        <div className="header-actions">
+          <Logo />
+          <span className="page-title">My space</span>
+        </div>
         <div className="header-actions">
           <span className="me">
             <Avatar name={me} />
@@ -45,10 +48,7 @@ export default function Home({
       <section className="page">
         <div className="page-copy">
           <h1>Hi {me}, what's next?</h1>
-          <p>
-            Start a group for your team project, or join one with an invitation code. Each group keeps one ongoing
-            chat and a decision log for every meeting.
-          </p>
+          <p>Create a group for your team project, or join one with a code.</p>
         </div>
 
         <div className="choices">
@@ -58,7 +58,7 @@ export default function Home({
             </span>
             <span className="choice-body">
               <strong>Create a group</strong>
-              <span>One per team project. You get an invitation code to share.</span>
+              <span>Get an invitation code to share.</span>
             </span>
             <span className="choice-arrow" aria-hidden="true">
               →
@@ -70,7 +70,7 @@ export default function Home({
             </span>
             <span className="choice-body">
               <strong>Join a group</strong>
-              <span>Enter the code someone on your team sent you.</span>
+              <span>Use the code your team sent you.</span>
             </span>
             <span className="choice-arrow" aria-hidden="true">
               →

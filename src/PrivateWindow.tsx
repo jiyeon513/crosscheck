@@ -109,7 +109,7 @@ export default function PrivateWindow({
         <div className="thread">
           {items.length === 0 && local.length === 0 ? (
             <div className="empty">
-              <p>Think out loud here. Your agent reads the team chat and only shows you its suggestions.</p>
+              <p>Think out loud here. Only you can see this.</p>
             </div>
           ) : null}
           {items.map((item) => (
@@ -382,10 +382,7 @@ function CheckCard({ card, act, onAsk }: { card: UnderstandingCheckCard; act: Ac
               {card.status === "answered" ? "Update answer" : "Send answer"}
             </button>
           </div>
-          <p className="fine-left">
-            Pick how you understand it; that counts as agreeing with that reading. Choose “Not sure yet” if you are
-            not ready. The Moderator gets your answer without your name.
-          </p>
+          <p className="fine-left">Sent without your name. “Not sure yet” means not agreed.</p>
         </>
       ) : (
         <div className="pcard-answered">

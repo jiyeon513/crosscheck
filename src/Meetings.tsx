@@ -108,7 +108,7 @@ export default function CurrentLog({
           {agreement && agreement.status !== "cancelled" && agreement.status !== "aligned" ? (
             <AgreementBox agreement={agreement} isHost={isHost} act={act} />
           ) : (
-            <p className="muted small-note">No check is open. A disagreement stays here until everyone agrees.</p>
+            <p className="muted small-note">No open check.</p>
           )}
         </section>
 
@@ -116,7 +116,7 @@ export default function CurrentLog({
           <h3>Agreed</h3>
           {!meeting && !scheduling ? (
             <div className="empty">
-              <p>No meeting today or coming up. Schedule one to start its decision log.</p>
+              <p>No meeting scheduled.</p>
               <button className="btn small schedule-btn" type="button" onClick={() => setScheduling(true)}>
                 + Schedule a meeting
               </button>
@@ -134,9 +134,6 @@ export default function CurrentLog({
           {decisions.length === 0 && meeting ? (
             <div className="empty">
               <p>Nothing agreed yet.</p>
-              <p className="small-note">
-                A proposal stays above until everyone reads it the same way. Then it is recorded here.
-              </p>
             </div>
           ) : null}
           {decisions.length > 0 ? <DecisionList decisions={decisions} onEdit={onEdit} /> : null}
@@ -264,16 +261,15 @@ function AgreementBox({ agreement, isHost, act }: { agreement: Agreement; isHost
             <span style={{ width: `${askedOf ? (answered / askedOf) * 100 : 0}%` }} />
           </div>
           <p className="agreement-meta">
-            {answered}/{askedOf} answered privately. Answer the card in your own window.
+            {answered}/{askedOf} answered
           </p>
         </>
       ) : status === "mismatch" ? (
         <div className="agreement-next">
           <p>
-            <strong>What now?</strong> The Moderator asked one question in the chat. Talk it through there. When
-            someone states the version the team settles on, the Moderator checks it again automatically.
+            <strong>Next:</strong> talk it through in the chat. Once you settle, say the final version there and it
+            is checked again{isHost ? ", or revise it below" : ""}.
           </p>
-          {isHost ? <p>As host, you can also revise the proposal yourself.</p> : null}
         </div>
       ) : (
         <p className="agreement-meta">Saved to the decision log below.</p>
