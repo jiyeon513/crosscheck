@@ -144,7 +144,7 @@ async function main() {
   for (const l of leaks) console.log(`    ✗ ${l}`);
   console.log(`  ${usageSummary()}`);
 
-  const ok = leaks.length === 0 && (info.mode !== "mock" || (meeting.stage === "done" && meeting.decisions.length === 1));
+  const ok = leaks.length === 0 && (info.mode !== "mock" || (meeting.check?.status === "aligned" && meeting.decisions.length === 1));
   if (!ok) {
     console.log("\n  RESULT: FAILED");
     process.exit(1);

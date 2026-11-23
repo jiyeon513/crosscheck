@@ -1,14 +1,6 @@
-import { useState, type FormEvent, type ReactNode } from "react";
-import { Logo, joinGroup } from "./api";
-import {
-  cleanCode,
-  loadGroups,
-  makeCode,
-  saveGroup,
-  setCurrentGroup,
-  type Group,
-  type Profile,
-} from "./model";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { api, Logo } from "./api";
+import { cleanCode } from "./model";
 import { BackButton } from "./ui";
 
 function StartLayout({ onBack, children }: { onBack: () => void; children: ReactNode }) {
@@ -23,37 +15,19 @@ function StartLayout({ onBack, children }: { onBack: () => void; children: React
   );
 }
 
-export function CreateChat({
-  profile,
-  onBack,
-  onCreated,
-}: {
-  profile: Profile;
-  onBack: () => void;
-  onCreated: (groupId: string) => void;
-}) {
+export function CreateGroup({ onBack, onCreated }: { onBack: () => void; onCreated: (code: string) => void }) {
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const groupTitle = title.trim();
-    if (!groupTitle) return;
+    if (!title.trim()) return;
     setError("");
     setPending(true);
     try {
-      const joined = await joinGroup({ name: profile.name, code: makeCode(), title: groupTitle });
-      const now = new Date().toISOString();
-      saveGroup({
-        id: joined.code,
-        code: joined.code,
-        title: joined.title || groupTitle,
-        createdAt: now,
-        openedAt: now,
-      });
-      setCurrentGroup(joined.code);
-      onCreated(joined.code);
+      const group = await api.createGroup(title.trim());
+      onCreated(group.code);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create the group.");
     } finally {
@@ -69,8 +43,7 @@ export function CreateChat({
         </span>
         <h1>Create a group</h1>
         <p className="muted">
-          One group per team project. You'll schedule meetings inside it and get an invitation code
-          next.
+          One group per team project. You'll schedule meetings inside it and get an invitation code next.
         </p>
         <label>
           Group name
@@ -91,15 +64,7 @@ export function CreateChat({
   );
 }
 
-export function JoinChat({
-  profile,
-  onBack,
-  onJoined,
-}: {
-  profile: Profile;
-  onBack: () => void;
-  onJoined: (groupId: string) => void;
-}) {
+export function JoinGroup({ onBack, onJoined }: { onBack: () => void; onJoined: (code: string) => void }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -111,18 +76,8 @@ export function JoinChat({
     setError("");
     setPending(true);
     try {
-      const joined = await joinGroup({ name: profile.name, code: nextCode });
-      const previous = loadGroups().find((group) => group.id === joined.code);
-      const now = new Date().toISOString();
-      saveGroup({
-        id: joined.code,
-        code: joined.code,
-        title: previous?.title || joined.title,
-        createdAt: previous?.createdAt ?? now,
-        openedAt: now,
-      });
-      setCurrentGroup(joined.code);
-      onJoined(joined.code);
+      const group = await api.joinGroup(nextCode);
+      onJoined(group.code);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not join the group.");
     } finally {
@@ -153,11 +108,7 @@ export function JoinChat({
           />
         </label>
         {error ? <p className="error">{error}</p> : null}
-        <button
-          className="btn primary block"
-          type="submit"
-          disabled={cleanCode(code).length === 0 || pending}
-        >
+        <button className="btn primary block" type="submit" disabled={cleanCode(code).length === 0 || pending}>
           {pending ? "Joining..." : "Join group"}
         </button>
       </form>
@@ -165,21 +116,21 @@ export function JoinChat({
   );
 }
 
-export function InviteCode({
-  group,
-  onBack,
-  onEnter,
-}: {
-  group: Group;
-  onBack: () => void;
-  onEnter: () => void;
-}) {
+export function InviteCode({ code, onBack, onEnter }: { code: string; onBack: () => void; onEnter: () => void }) {
+  const [title, setTitle] = useState("");
   const [copied, setCopied] = useState(false);
-  const code = group.code.toUpperCase();
+  const shown = code.toUpperCase();
+
+  useEffect(() => {
+    api
+      .group(code)
+      .then((detail) => setTitle(detail.group.title))
+      .catch(() => setTitle(""));
+  }, [code]);
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(code);
+      await navigator.clipboard.writeText(shown);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -193,10 +144,10 @@ export function InviteCode({
         <span className="step-icon done" aria-hidden="true">
           ✓
         </span>
-        <h1>{group.title}</h1>
+        <h1>{title || "Your group"}</h1>
         <p className="muted">Share this invitation code so your team can join.</p>
-        <div className="invite-code" aria-label={`Invitation code ${code}`}>
-          {code.split("").map((char, index) => (
+        <div className="invite-code" aria-label={`Invitation code ${shown}`}>
+          {shown.split("").map((char, index) => (
             <span key={index}>{char}</span>
           ))}
         </div>

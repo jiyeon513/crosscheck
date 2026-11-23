@@ -1,0 +1,22 @@
+# Render Blueprint: New > Blueprint, pick this repository, then fill in OPENROUTER_API_KEY.
+services:
+  - type: web
+    name: crosscheck
+    runtime: docker
+    plan: starter          # a persistent disk needs a paid plan; see README for the free option
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false        # asked for when the Blueprint is created; never committed
+      - key: LLM_MODEL
+        value: openai/gpt-5-mini
+      - key: PERSONAL_LLM_MODEL
+        value: openai/gpt-5-mini
+      - key: LLM_REASONING_EFFORT
+        value: low
+      - key: DATA_DIR
+        value: /data
+    disk:
+      name: crosscheck-data
+      mountPath: /data
+      sizeGB: 1

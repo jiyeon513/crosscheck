@@ -1,0 +1,31 @@
+{
+  "name": "S3 · Club event: team converges fast, one member has a private budget concern. Tests silence on convergence, anonymous concern, revision.",
+  "goal": "Plan our club's end-of-semester event",
+  "host": "Mina",
+  "participants": ["Mina", "Leo", "Sara", "Jun"],
+  "steps": [
+    { "title": "T1 · Sara's private worry. Expected: private reply only.", "do": "private", "user": "Sara", "text": "Our budget is only about 100 dollars and last year's picnic cost 200. I don't want to be the one who brings it up though." },
+
+    { "title": "Team converges quickly. Expected: NO check on 'I liked the picnic too' or 'Same'.", "do": "group", "user": "Mina", "text": "Any ideas for the end-of-semester event?" },
+    { "do": "group", "user": "Leo", "text": "A picnic by the river like last year?" },
+    { "do": "group", "user": "Jun", "text": "I liked the picnic too, let's not overthink it." },
+    { "do": "group", "user": "Mina", "text": "Same, picnic works for me." },
+
+    { "title": "Silence while converging. Expected: moderator stays quiet (no angle).", "do": "wait", "seconds": 65 },
+
+    { "title": "T3 · Decision. Expected: check opens. Sara pins down her concern and raises it anonymously.", "do": "group", "user": "Leo", "text": "OK, picnic it is. Let's do it on Saturday." },
+    { "do": "private", "user": "Sara", "text": "Something about this bothers me but everyone already agrees." },
+    { "do": "private", "user": "Sara", "text": "It's the money. We only have 100 dollars and the picnic cost 200 last time." },
+    { "do": "concern", "user": "Sara", "mode": "anonymous" },
+    { "do": "answer", "user": "Mina", "prefer": "this" },
+    { "do": "answer", "user": "Leo", "prefer": "this" },
+    { "do": "answer", "user": "Jun", "prefer": "next" },
+    { "do": "answer", "user": "Sara", "prefer": "next" },
+
+    { "title": "Revised decision. Expected: Agreed 4/4 and the concern is reflected.", "do": "group", "user": "Mina", "text": "Good point on the budget. Let's do next Saturday, potluck style, and keep it under 100 dollars." },
+    { "do": "answer", "user": "Mina", "prefer": "" },
+    { "do": "answer", "user": "Leo", "prefer": "" },
+    { "do": "answer", "user": "Jun", "prefer": "" },
+    { "do": "answer", "user": "Sara", "prefer": "" }
+  ]
+}

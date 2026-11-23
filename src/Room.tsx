@@ -1,38 +1,14 @@
 // The meeting room: team chat (with the Moderator), the current meeting's decision log,
-// and this person's private window with their Personal Agent.
+// and this member's private window with their Personal Agent.
 //
 // The agents run on the server (agents/meeting.ts, served by server/rooms.ts). This page polls
-// its own view of the room. Stream keeps the schedule, manual decisions and the persistent chat copy.
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
-import type { Channel } from "stream-chat";
-import { useCreateChatClient } from "stream-chat-react";
-import type { ModeratorNote } from "../agents/protocol";
-import { Logo, type JoinResult, type RoomGroupMessage, joinGroup } from "./api";
-import {
-  Bubble,
-  Composer,
-  People,
-  clearCarried,
-  readDrop,
-  type Quote,
-  type Source,
-} from "./chatParts";
+// the signed-in member's own view of the room.
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
+import type { GroupMessage } from "../agents/protocol";
+import { api, Logo } from "./api";
+import { Bubble, Composer, People, clearCarried, readDrop, type Quote, type Source } from "./chatParts";
 import CurrentLog from "./Meetings";
-import {
-  currentMeeting,
-  decisionsFor,
-  demoMessagesFor,
-  formatMeetingTime,
-  markOpened,
-  meetingsFor,
-  saveDecisions,
-  saveMeetings,
-  sortMeetings,
-  type Decision,
-  type Group,
-  type Meeting,
-  type Profile,
-} from "./model";
+import { currentMeeting, formatMeetingTime, type GroupDetail, type Meeting } from "./model";
 import PrivateWindow, { type AgentReference } from "./PrivateWindow";
 import { Avatar } from "./ui";
 import { useRoom } from "./useRoom";
@@ -40,41 +16,10 @@ import { useRoom } from "./useRoom";
 type Target = "team" | "agent" | "log";
 
 const LOG_OPEN_KEY = "crosscheck.logOpen";
+const GROUP_POLL_MS = 20_000;
 
-/** A team chat line as this page draws it. */
-type ChatLine = {
-  id: string;
-  author: string;
-  text: string;
-  createdAt: string;
-  mine: boolean;
-  kind: "user" | "moderator";
-  anonymous?: boolean;
-  note?: ModeratorNote;
-  quote?: Quote;
-  forwarded?: boolean;
-};
-
-type WireMessage = {
-  id?: string;
-  text?: string;
-  created_at?: unknown;
-  user?: { id?: string; name?: string } | null;
-  custom?: { kind?: string; meetingId?: string; meeting?: Meeting } | null;
-};
-
-export default function Room({
-  group,
-  profile,
-  onBack,
-}: {
-  group: Group;
-  profile: Profile;
-  onBack: () => void;
-}) {
-  const [session, setSession] = useState<JoinResult | null>(null);
-  const [decisions, setDecisions] = useState<Decision[]>(() => decisionsFor(group.id));
-  const [meetings, setMeetings] = useState<Meeting[]>(() => meetingsFor(group.id));
+export default function Room({ code, me, onBack }: { code: string; me: string; onBack: () => void }) {
+  const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [teamDraft, setTeamDraft] = useState("");
   const [teamQuote, setTeamQuote] = useState<Quote | null>(null);
   const [sendingTeam, setSendingTeam] = useState(false);
@@ -92,81 +37,44 @@ export default function Room({
     }
   });
   const [flash, setFlash] = useState(false);
-  const channelRef = useRef<Channel | null>(null);
   const teamEnd = useRef<HTMLDivElement | null>(null);
 
-  const current = currentMeeting(meetings);
-  const demo = useMemo(() => demoMessagesFor(group.id), [group.id]);
-  const room = useRoom({
-    code: group.code,
-    user: profile.name,
-    groupTitle: group.title,
-    meeting: current,
-    history: demo,
-  });
-  const view = room.view;
-
-  useEffect(() => {
-    markOpened(group.id);
-  }, [group.id]);
-
-  // Stream: membership in the group channel, for the schedule and decision records.
-  useEffect(() => {
-    let cancelled = false;
-    joinGroup({ name: profile.name, code: group.code, title: group.title })
-      .then((result) => {
-        if (!cancelled) setSession(result);
-      })
-      .catch((caught: unknown) => {
-        // The meeting room works without Stream; it just is not kept after a server restart.
-        console.warn("Stream unavailable:", caught);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [group.code, group.title, profile.name]);
-
-  // Decisions the team agreed on through the moderator's check join this meeting's decision log.
-  useEffect(() => {
-    if (!view || !current || view.decisions.length === 0) return;
-    const incoming: Decision[] = view.decisions.map((record) => ({
-      id: record.streamId,
-      groupId: group.id,
-      meetingId: current.id,
-      text: record.statement,
-      author: "Agreed by everyone",
-      createdAt: new Date(record.at).toISOString(),
-    }));
-    setDecisions((existing) => {
-      if (incoming.every((item) => existing.some((known) => known.id === item.id))) return existing;
-      const merged = mergeById(existing, incoming).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      saveDecisions(group.id, merged);
-      return merged;
-    });
-  }, [view, current, group.id]);
-
-  const lines: ChatLine[] = useMemo(() => {
-    if (!view) {
-      return demo.map((message) => ({ ...message, mine: message.author === profile.name, kind: "user" as const }));
+  const loadGroup = useCallback(async () => {
+    try {
+      setDetail(await api.group(code));
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Could not load the group.");
     }
-    return view.group.map((message: RoomGroupMessage) => ({
-      id: message.id,
-      author: message.author,
-      text: message.text,
-      createdAt: new Date(message.at).toISOString(),
-      mine: message.kind === "user" && !message.anonymous && message.author === profile.name,
-      kind: message.kind,
-      anonymous: message.anonymous,
-      note: message.note,
-      quote: message.quote,
-      forwarded: message.forwarded,
-    }));
-  }, [view, demo, profile.name]);
-  const people = view?.participants ?? [profile.name];
+  }, [code]);
+
+  useEffect(() => {
+    void loadGroup();
+    const timer = setInterval(() => void loadGroup(), GROUP_POLL_MS);
+    return () => clearInterval(timer);
+  }, [loadGroup]);
+
+  const meetings = detail?.meetings ?? [];
+  const current = currentMeeting(meetings);
+  // Wait for the schedule, so the member enters the room of the right meeting.
+  const room = useRoom(code, current?.id ?? null, detail !== null);
+  const view = room.view;
+  const lines: GroupMessage[] = useMemo(() => view?.group ?? [], [view]);
+  const people = view?.participants ?? [me];
+  const log = view?.log ?? [];
 
   useEffect(() => {
     teamEnd.current?.scrollIntoView({ block: "end" });
   }, [lines.length]);
+
+  // A new agreed decision: flash the collapsed panel so it is not missed.
+  const logCount = useRef(0);
+  useEffect(() => {
+    if (log.length > logCount.current && logCount.current > 0 && !logOpen) {
+      setFlash(true);
+      setTimeout(() => setFlash(false), 900);
+    }
+    logCount.current = log.length;
+  }, [log.length, logOpen]);
 
   function toggleLog() {
     setLogOpen((open) => {
@@ -177,93 +85,6 @@ export default function Room({
       }
       return !open;
     });
-  }
-
-  function rememberDecisions(next: Decision[]) {
-    setDecisions(next);
-    saveDecisions(group.id, next);
-  }
-
-  /** A decision written or dropped into the log by hand. */
-  async function recordDecision(text: string) {
-    const meetingId = current?.id ?? "";
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    const entry: Decision = {
-      id: `dec_${crypto.randomUUID()}`,
-      groupId: group.id,
-      ...(meetingId ? { meetingId } : {}),
-      text: trimmed,
-      author: profile.name,
-      createdAt: new Date().toISOString(),
-    };
-    rememberDecisions([...decisions.filter((item) => item.id !== entry.id), entry]);
-    if (!logOpen) {
-      setFlash(true);
-      setTimeout(() => setFlash(false), 900);
-    }
-    const channel = channelRef.current;
-    if (!channel) return;
-    try {
-      await channel.sendMessage({
-        message: {
-          id: entry.id,
-          text: entry.text,
-          custom: { kind: "decision", ...(meetingId ? { meetingId } : {}) },
-        },
-      });
-    } catch (caught) {
-      setNotice(caught instanceof Error ? caught.message : "Saved on this device only.");
-    }
-  }
-
-  async function scheduleMeeting(title: string, startsAt: string) {
-    const meeting: Meeting = {
-      id: `mtg_${crypto.randomUUID()}`,
-      groupId: group.id,
-      title,
-      startsAt,
-      createdBy: profile.name,
-      createdAt: new Date().toISOString(),
-    };
-    const next = sortMeetings([...meetings, meeting]);
-    setMeetings(next);
-    saveMeetings(group.id, next);
-    await shareMeeting(meeting);
-  }
-
-  async function shareMeeting(meeting: Meeting) {
-    const channel = channelRef.current;
-    if (!channel) return false;
-    const { pendingShare: _pending, ...shared } = meeting;
-    try {
-      await channel.sendMessage({
-        message: {
-          id: meeting.id,
-          text: `Scheduled ${meeting.title} · ${formatMeetingTime(meeting.startsAt)}`,
-          custom: { kind: "meeting", meeting: shared },
-        },
-      });
-      return true;
-    } catch (caught) {
-      setNotice(caught instanceof Error ? caught.message : "Saved on this device only.");
-      return false;
-    }
-  }
-
-  /** Meetings scheduled from the group page are announced once Stream is connected. */
-  async function sharePending() {
-    const pending = meetingsFor(group.id).filter((item) => item.pendingShare);
-    if (pending.length === 0) return;
-    const sent = new Set<string>();
-    for (const meeting of pending) {
-      if (await shareMeeting(meeting)) sent.add(meeting.id);
-    }
-    const next = meetingsFor(group.id).map((item) =>
-      sent.has(item.id) ? { ...item, pendingShare: false } : item,
-    );
-    saveMeetings(group.id, next);
-    setMeetings(next);
   }
 
   async function sendTeam(event: FormEvent) {
@@ -286,8 +107,18 @@ export default function Room({
     }
   }
 
-  /** The moderator offered an angle to everyone; think about it privately with the agent. */
-  async function explore(line: ChatLine) {
+  /** A dropped message becomes a proposal; the Moderator opens an agreement check on it. */
+  async function propose(text: string) {
+    try {
+      await room.act("propose", { text });
+      setNotice("");
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Could not propose that.");
+    }
+  }
+
+  /** The Moderator offered an angle to everyone; think about it privately with the agent. */
+  async function explore(line: GroupMessage) {
     setExploring(line.id);
     try {
       await room.act("private", {
@@ -296,7 +127,7 @@ export default function Room({
         intent: "invite_brainstorm",
       });
     } catch (caught) {
-      setNotice(caught instanceof Error ? caught.message : "The personal agent did not answer.");
+      setNotice(caught instanceof Error ? caught.message : "Your agent could not answer just now.");
     } finally {
       setExploring(null);
     }
@@ -328,7 +159,7 @@ export default function Room({
     clearCarried();
     if (!payload) return;
     if (target === "log") {
-      void recordDecision(payload.text);
+      void propose(payload.text);
       return;
     }
     if (target === "team") {
@@ -344,7 +175,7 @@ export default function Room({
 
   async function copyCode() {
     try {
-      await navigator.clipboard.writeText(group.code.toUpperCase());
+      await navigator.clipboard.writeText(code.toUpperCase());
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -368,32 +199,27 @@ export default function Room({
           </button>
           <Logo />
           <span className="divider" aria-hidden="true" />
-          <h1>{group.title}</h1>
+          <h1>{detail?.group.title ?? ""}</h1>
           <button className="code-chip" type="button" onClick={copyCode} title="Copy invitation code">
-            {copied ? "Copied" : group.code.toUpperCase()}
+            {copied ? "Copied" : code.toUpperCase()}
           </button>
         </div>
         <span className="me">
-          <Avatar name={profile.name} />
-          {profile.name}
+          <Avatar name={me} />
+          {me}
           {view?.isHost ? <em className="host-tag">Host</em> : null}
         </span>
       </header>
       {status ? <p className="status-bar">{status}</p> : null}
       {view?.llm.mode === "unconfigured" ? (
-        <p className="status-bar warn">
-          Agents are off: set OPENROUTER_API_KEY in the server&apos;s .env and restart it.
-        </p>
+        <p className="status-bar warn">Agents are off: the server has no OPENROUTER_API_KEY.</p>
       ) : null}
       <div className={logOpen ? "workspace" : "workspace log-closed"}>
         <section className="chat-panel team-panel">
           <header className="panel-head">
             <div>
               <h2>Team conversation</h2>
-              <p>
-                {current ? `${current.title} · ` : ""}
-                Moderator is listening
-              </p>
+              <p>{current ? `${current.title} · ` : ""}Moderator is listening</p>
             </div>
             <People people={people} />
           </header>
@@ -415,6 +241,7 @@ export default function Room({
                   <TeamLine
                     key={item.line.id}
                     line={item.line}
+                    mine={item.line.kind === "user" && !item.line.anonymous && item.line.author === me}
                     exploring={exploring === item.line.id}
                     onExplore={() => void explore(item.line)}
                     onDragState={onDragState}
@@ -424,34 +251,6 @@ export default function Room({
             )}
             <div ref={teamEnd} />
           </div>
-          {session ? (
-            <LiveChannel
-              session={session}
-              groupId={group.id}
-              onChannel={(channel) => {
-                channelRef.current = channel;
-                void sharePending();
-              }}
-              onWire={(liveDecisions, liveMeetings) => {
-                if (liveMeetings.length) {
-                  setMeetings((existing) => {
-                    const merged = sortMeetings(mergeById(existing, liveMeetings));
-                    saveMeetings(group.id, merged);
-                    return merged;
-                  });
-                }
-                if (liveDecisions.length) {
-                  setDecisions((existing) => {
-                    const merged = mergeById(existing, liveDecisions).sort((a, b) =>
-                      a.createdAt.localeCompare(b.createdAt),
-                    );
-                    saveDecisions(group.id, merged);
-                    return merged;
-                  });
-                }
-              }}
-            />
-          ) : null}
           <Composer
             tone="team"
             active={dragging !== null && dragging !== "team"}
@@ -462,20 +261,26 @@ export default function Room({
             value={teamDraft}
             onChange={setTeamDraft}
             onSubmit={sendTeam}
-            placeholder={view ? `Message the team as ${profile.name}...` : "Connecting..."}
+            placeholder={view ? `Message the team as ${me}...` : "Connecting..."}
             canSend={Boolean(view) && (teamDraft.trim().length > 0 || teamQuote !== null)}
             busy={sendingTeam}
-            dropLabel="Drop to share with the team"
+            dropLabel="Drop to reply to it"
           />
         </section>
 
         <CurrentLog
           meeting={current}
-          decisions={decisions.filter((item) => current && item.meetingId === current.id)}
+          decisions={log}
           open={logOpen}
           onToggle={toggleLog}
-          onRecord={(text) => void recordDecision(text)}
-          onSchedule={(title, startsAt) => void scheduleMeeting(title, startsAt)}
+          onEdit={async (id, text) => {
+            await api.editDecision(code, id, text);
+            await room.refresh();
+          }}
+          onSchedule={async (title, startsAt) => {
+            await api.scheduleMeeting(code, title, startsAt);
+            await loadGroup();
+          }}
           onOpenGroup={onBack}
           zone={dropZone("log")}
           over={over === "log"}
@@ -487,7 +292,7 @@ export default function Room({
         />
 
         <PrivateWindow
-          me={profile.name}
+          me={me}
           view={view}
           act={room.act}
           reference={agentReference}
@@ -502,13 +307,22 @@ export default function Room({
   );
 }
 
+const NOTE_LABEL: Record<string, string> = {
+  agreed: "Decision agreed",
+  agreement_count: "Not agreed yet",
+  check_opened: "Agreement check",
+  check_closed: "Check closed",
+};
+
 function TeamLine({
   line,
+  mine,
   exploring,
   onExplore,
   onDragState,
 }: {
-  line: ChatLine;
+  line: GroupMessage;
+  mine: boolean;
   exploring: boolean;
   onExplore: () => void;
   onDragState: (from: Source | null) => void;
@@ -520,23 +334,19 @@ function TeamLine({
         {exploring ? "Asking your agent..." : "◇ Think about it privately"}
       </button>
     ) : null;
-  const label =
-    note?.type === "agreed"
-      ? "Decision agreed"
-      : note?.type === "agreement_count"
-        ? "Agreement check"
-        : note?.type === "angle_prompt"
-          ? `Missing angle · ${note.angle}`
-          : undefined;
+  const label = note
+    ? note.type === "angle_prompt"
+      ? `Missing angle · ${note.angle}`
+      : NOTE_LABEL[note.type]
+    : undefined;
   return (
     <Bubble
       from="team"
-      mine={line.mine}
+      mine={mine}
       author={line.author}
       label={label}
       text={line.text}
       quote={line.quote}
-      forwarded={line.forwarded}
       variant={line.kind === "moderator" ? "moderator" : line.anonymous ? "anonymous" : undefined}
       messageId={line.id}
       footer={footer}
@@ -545,107 +355,17 @@ function TeamLine({
   );
 }
 
-/** Stream channel for the schedule and decision records (the chat itself comes from the room). */
-function LiveChannel({
-  session,
-  groupId,
-  onChannel,
-  onWire,
-}: {
-  session: JoinResult;
-  groupId: string;
-  onChannel: (channel: Channel) => void;
-  onWire: (decisions: Decision[], meetings: Meeting[]) => void;
-}) {
-  const client = useCreateChatClient({
-    apiKey: session.apiKey,
-    tokenOrProvider: session.token,
-    userData: { id: session.userId, name: session.name },
-  });
-  const onWireRef = useRef(onWire);
-  const onChannelRef = useRef(onChannel);
-  onWireRef.current = onWire;
-  onChannelRef.current = onChannel;
-
-  useEffect(() => {
-    if (!client) return;
-    let cancelled = false;
-    const channel = client.channel("messaging", groupId);
-    const sync = () => publish(channel, groupId, onWireRef.current);
-    channel
-      .watch()
-      .then(() => {
-        if (cancelled) return;
-        onChannelRef.current(channel);
-        sync();
-        channel.on("message.new", sync);
-        channel.on("message.updated", sync);
-      })
-      .catch((caught: unknown) => console.warn("Could not open the Stream channel:", caught));
-    return () => {
-      cancelled = true;
-      channel.off("message.new", sync);
-      channel.off("message.updated", sync);
-    };
-  }, [client, groupId]);
-
-  return null;
-}
-
-function publish(channel: Channel, groupId: string, onWire: (decisions: Decision[], meetings: Meeting[]) => void) {
-  const messages = (channel.messagePaginator.items ?? []) as unknown as WireMessage[];
-  const decisions: Decision[] = [];
-  const meetings: Meeting[] = [];
-  for (const message of messages) {
-    const text = message.text?.trim() ?? "";
-    const custom = message.custom;
-    if (!message.id || !text || !custom) continue;
-    if (custom.kind === "meeting" && custom.meeting?.id && custom.meeting.startsAt) {
-      meetings.push({ ...custom.meeting, groupId });
-    } else if (custom.kind === "decision") {
-      decisions.push({
-        id: message.id,
-        groupId,
-        ...(custom.meetingId ? { meetingId: custom.meetingId } : {}),
-        text,
-        author: message.user?.name || "Team",
-        createdAt: toIso(message.created_at),
-      });
-    }
-  }
-  onWire(decisions, meetings);
-}
-
 type TimelineItem =
-  | { kind: "message"; at: string; line: ChatLine }
-  | { kind: "meeting"; at: string; meeting: Meeting };
+  | { kind: "message"; at: number; line: GroupMessage }
+  | { kind: "meeting"; at: number; meeting: Meeting };
 
 /** The team chat is one long thread; meetings that have started appear as dividers in it. */
-function buildTimeline(lines: ChatLine[], meetings: Meeting[], now: Date): TimelineItem[] {
+function buildTimeline(lines: GroupMessage[], meetings: Meeting[], now: Date): TimelineItem[] {
   const items: TimelineItem[] = [
-    ...lines.map((line) => ({ kind: "message" as const, at: line.createdAt, line })),
+    ...lines.map((line) => ({ kind: "message" as const, at: line.at, line })),
     ...meetings
       .filter((meeting) => new Date(meeting.startsAt) <= now)
-      .map((meeting) => ({ kind: "meeting" as const, at: meeting.startsAt, meeting })),
+      .map((meeting) => ({ kind: "meeting" as const, at: new Date(meeting.startsAt).getTime(), meeting })),
   ];
-  return items.sort((a, b) => a.at.localeCompare(b.at) || (a.kind === "meeting" ? -1 : 1));
-}
-
-function mergeById<T extends { id: string }>(existing: T[], incoming: T[]) {
-  const map = new Map(existing.map((item) => [item.id, item]));
-  for (const item of incoming) map.set(item.id, { ...map.get(item.id), ...item });
-  return [...map.values()];
-}
-
-function toIso(value: unknown) {
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === "string" && value) {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const millis = value > 1e14 ? value / 1e6 : value;
-    return new Date(millis).toISOString();
-  }
-  return new Date().toISOString();
+  return items.sort((a, b) => a.at - b.at || (a.kind === "meeting" ? -1 : 1));
 }

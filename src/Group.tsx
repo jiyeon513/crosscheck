@@ -1,61 +1,67 @@
-import { useState } from "react";
-import { Logo } from "./api";
+import { useCallback, useEffect, useState } from "react";
+import { api, Logo } from "./api";
 import { DecisionList, MeetingDate, ScheduleForm, StatusBadge } from "./Meetings";
-import {
-  addMeeting,
-  decisionsFor,
-  formatMeetingTime,
-  markOpened,
-  meetingStatus,
-  meetingsFor,
-  type Group,
-  type Meeting,
-  type Profile,
-} from "./model";
+import { formatMeetingTime, meetingStatus, type GroupDetail, type Meeting } from "./model";
 import { Avatar, BackButton } from "./ui";
 
 export default function GroupPage({
-  group,
-  profile,
+  code,
+  me,
   onBack,
   onOpenChat,
 }: {
-  group: Group;
-  profile: Profile;
+  code: string;
+  me: string;
   onBack: () => void;
   onOpenChat: () => void;
 }) {
-  const [meetings, setMeetings] = useState(() => meetingsFor(group.id));
+  const [detail, setDetail] = useState<GroupDetail | null>(null);
+  const [error, setError] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [copied, setCopied] = useState(false);
   const [highlight, setHighlight] = useState<string | null>(null);
-  const decisions = decisionsFor(group.id);
-  const now = new Date();
 
+  const load = useCallback(async () => {
+    try {
+      setDetail(await api.group(code));
+      setError("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load the group.");
+    }
+  }, [code]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!detail) {
+    return (
+      <main className="screen scroll">
+        <header className="app-header">
+          <BackButton onClick={onBack} label="Groups" />
+        </header>
+        <section className="page">{error ? <p className="error">{error}</p> : <p className="muted">Loading...</p>}</section>
+      </main>
+    );
+  }
+
+  const { group, meetings, decisions } = detail;
+  const now = new Date();
   const upcoming = meetings.filter((item) => meetingStatus(item, now) !== "past");
   const done = meetings.filter((item) => meetingStatus(item, now) === "past").reverse();
-  const logged = meetings
-    .filter((item) => meetingStatus(item, now) !== "upcoming")
-    .slice()
-    .reverse();
+  const logged = meetings.filter((item) => meetingStatus(item, now) !== "upcoming").reverse();
   const known = new Set(meetings.map((item) => item.id));
   const loose = decisions.filter((item) => !item.meetingId || !known.has(item.meetingId));
-  const decisionsOf = (meeting: Meeting) =>
-    decisions.filter((item) => item.meetingId === meeting.id);
+  const decisionsOf = (meeting: Meeting) => decisions.filter((item) => item.meetingId === meeting.id);
+  const edit = async (id: string, text: string) => {
+    await api.editDecision(code, id, text);
+    await load();
+  };
 
-  function schedule(title: string, startsAt: string) {
-    addMeeting({
-      id: `mtg_${crypto.randomUUID()}`,
-      groupId: group.id,
-      title,
-      startsAt,
-      createdBy: profile.name,
-      createdAt: new Date().toISOString(),
-      pendingShare: true,
-    });
-    markOpened(group.id);
-    setMeetings(meetingsFor(group.id));
+  async function schedule(title: string, startsAt: string) {
+    await api.scheduleMeeting(code, title, startsAt);
     setScheduling(false);
+    await load();
   }
 
   function jumpTo(id: string) {
@@ -82,8 +88,8 @@ export default function GroupPage({
           <Logo />
         </div>
         <span className="me">
-          <Avatar name={profile.name} />
-          {profile.name}
+          <Avatar name={me} />
+          {me}
         </span>
       </header>
 
@@ -96,19 +102,13 @@ export default function GroupPage({
             <div>
               <h1>{group.title}</h1>
               <p className="muted">
-                {meetings.length} meeting{meetings.length === 1 ? "" : "s"} · {done.length} done ·{" "}
-                {upcoming.length} upcoming · {decisions.length} decision
-                {decisions.length === 1 ? "" : "s"}
+                {group.members.join(", ")} · {meetings.length} meeting{meetings.length === 1 ? "" : "s"} ·{" "}
+                {decisions.length} decision{decisions.length === 1 ? "" : "s"}
               </p>
             </div>
           </div>
           <div className="group-hero-actions">
-            <button
-              className="code-chip"
-              type="button"
-              onClick={copyCode}
-              title="Copy invitation code"
-            >
+            <button className="code-chip" type="button" onClick={copyCode} title="Copy invitation code">
               {copied ? "Copied" : group.code.toUpperCase()}
             </button>
             <button className="btn primary" type="button" onClick={onOpenChat}>
@@ -130,9 +130,7 @@ export default function GroupPage({
                 + Schedule
               </button>
             </header>
-            {scheduling ? (
-              <ScheduleForm onSubmit={schedule} onCancel={() => setScheduling(false)} />
-            ) : null}
+            {scheduling ? <ScheduleForm onSubmit={schedule} onCancel={() => setScheduling(false)} /> : null}
 
             <h3 className="sub-head">Upcoming</h3>
             {upcoming.length === 0 ? (
@@ -169,11 +167,7 @@ export default function GroupPage({
               <ul className="schedule-list">
                 {done.map((meeting) => (
                   <li key={meeting.id}>
-                    <button
-                      className="schedule-row past"
-                      type="button"
-                      onClick={() => jumpTo(meeting.id)}
-                    >
+                    <button className="schedule-row past" type="button" onClick={() => jumpTo(meeting.id)}>
                       <MeetingDate value={meeting.startsAt} status="past" />
                       <span className="meeting-info">
                         <strong>{meeting.title}</strong>
@@ -183,8 +177,7 @@ export default function GroupPage({
                         </span>
                       </span>
                       <span className="row-count">
-                        {decisionsOf(meeting).length} decision
-                        {decisionsOf(meeting).length === 1 ? "" : "s"} ›
+                        {decisionsOf(meeting).length} decision{decisionsOf(meeting).length === 1 ? "" : "s"} ›
                       </span>
                     </button>
                   </li>
@@ -196,7 +189,7 @@ export default function GroupPage({
           <section className="logs-col">
             <header className="section-head plain">
               <h2>Decision logs</h2>
-              <p className="muted">What the team agreed on, meeting by meeting</p>
+              <p className="muted">What the team agreed on, meeting by meeting. You can fix the wording.</p>
             </header>
             {logged.length === 0 && loose.length === 0 ? (
               <div className="card empty-card">
@@ -225,12 +218,10 @@ export default function GroupPage({
                   </header>
                   {items.length === 0 ? (
                     <p className="muted small-note">
-                      {status === "today"
-                        ? "In progress. Nothing recorded yet."
-                        : "No decisions recorded."}
+                      {status === "today" ? "In progress. Nothing agreed yet." : "No decisions were agreed."}
                     </p>
                   ) : (
-                    <DecisionList decisions={items} />
+                    <DecisionList decisions={items} onEdit={edit} />
                   )}
                 </article>
               );
@@ -241,11 +232,11 @@ export default function GroupPage({
                   <MeetingDate status="none" />
                   <div className="meeting-info">
                     <strong>Not tied to a meeting</strong>
-                    <span>Recorded outside a scheduled meeting</span>
+                    <span>Agreed outside a scheduled meeting</span>
                   </div>
                   <span className="count">{loose.length}</span>
                 </header>
-                <DecisionList decisions={loose} />
+                <DecisionList decisions={loose} onEdit={edit} />
               </article>
             ) : null}
           </section>

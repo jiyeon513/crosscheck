@@ -1,38 +1,8 @@
-import type { DecisionRecord, GroupMessage, UserView } from "../agents/protocol";
+// Calls to the CrossCheck server (server/index.ts). Every call after login carries the session token.
+import type { UserView } from "../agents/protocol";
+import type { Decision, Group, GroupDetail, GroupSummary, Meeting } from "./model";
 
-export type JoinResult = {
-  apiKey: string;
-  token: string;
-  userId: string;
-  name: string;
-  code: string;
-  title: string;
-};
-
-export async function joinGroup(input: {
-  name: string;
-  code: string;
-  title?: string;
-}): Promise<JoinResult> {
-  const response = await fetch("/api/join", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  const body = (await response.json()) as JoinResult & { error?: string };
-  if (!response.ok) throw new Error(body.error || "Could not join the group.");
-  return body;
-}
-
-// ---------- meeting room (agents run on the server: agents/meeting.ts) ----------
-
-export type RoomQuote = { author: string; text: string };
-export type RoomGroupMessage = GroupMessage & { quote?: RoomQuote; forwarded?: boolean };
-export type RoomDecision = DecisionRecord & { streamId: string };
-export type RoomView = Omit<UserView, "group" | "decisions"> & {
-  group: RoomGroupMessage[];
-  decisions: RoomDecision[];
-};
+export type RoomView = UserView & { meetingId: string; log: Decision[] };
 
 export class ApiError extends Error {
   constructor(
@@ -43,62 +13,82 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: "GET" | "POST", url: string, token: string, body?: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method,
-    headers: { "Content-Type": "application/json", "X-CrossCheck-Session": token },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
-  if (!response.ok) throw new ApiError(response.status, data.error || `Request failed (${response.status}).`);
-  return data;
-}
+const TOKEN_KEY = "crosscheck.session";
+let signedOut: () => void = () => {};
 
-const tokenKey = (code: string, meetingId: string, name: string) =>
-  `crosscheck.room.${code}.${meetingId}.${name}`;
-
-function readToken(key: string) {
+export function getToken() {
   try {
-    return localStorage.getItem(key) ?? "";
+    return localStorage.getItem(TOKEN_KEY) ?? "";
   } catch {
     return "";
   }
 }
 
-function writeToken(key: string, token: string) {
+function setToken(token: string) {
   try {
-    localStorage.setItem(key, token);
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
   } catch {
-    // The session then lasts only for this page.
+    // Without storage the session lasts until the page closes.
   }
 }
 
-/** Enter the room of a group's current meeting. The token is kept so a reload resumes the same seat. */
-export async function joinRoom(input: {
-  code: string;
-  user: string;
-  groupTitle: string;
-  meeting: { id: string; title: string; startsAt: string } | null;
-  history: { author: string; text: string; createdAt: string }[];
-}) {
-  const key = tokenKey(input.code, input.meeting?.id ?? "general", input.user);
-  const result = await request<{ roomKey: string; sessionToken: string }>(
-    "POST",
-    "/api/rooms/join",
-    readToken(key),
-    input,
-  );
-  writeToken(key, result.sessionToken);
-  return result;
+/** Called when the server says the session is no longer valid. */
+export function onSignedOut(callback: () => void) {
+  signedOut = callback;
 }
 
-export function roomView(roomKey: string, token: string) {
-  return request<RoomView>("GET", `/api/rooms/${roomKey}/view`, token);
+async function request<T>(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<T> {
+  const token = getToken();
+  const response = await fetch(path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+  if (response.status === 401 && token) {
+    setToken("");
+    signedOut();
+  }
+  if (!response.ok) throw new ApiError(response.status, data.error || `Request failed (${response.status}).`);
+  return data;
 }
 
-export function roomAction(roomKey: string, token: string, action: string, body: object) {
-  return request<{ ok: true }>("POST", `/api/rooms/${roomKey}/${action}`, token, body);
-}
+type Session = { name: string; token: string };
+
+export const api = {
+  async signUp(name: string, password: string) {
+    const session = await request<Session>("POST", "/api/auth/signup", { name, password });
+    setToken(session.token);
+    return session.name;
+  },
+  async logIn(name: string, password: string) {
+    const session = await request<Session>("POST", "/api/auth/login", { name, password });
+    setToken(session.token);
+    return session.name;
+  },
+  async logOut() {
+    await request("POST", "/api/auth/logout").catch(() => undefined);
+    setToken("");
+  },
+  me: () => request<{ name: string }>("GET", "/api/me"),
+  groups: () => request<GroupSummary[]>("GET", "/api/groups"),
+  createGroup: (title: string) => request<Group>("POST", "/api/groups", { title }),
+  joinGroup: (code: string) => request<Group>("POST", "/api/groups/join", { code }),
+  group: (code: string) => request<GroupDetail>("GET", `/api/groups/${code}`),
+  scheduleMeeting: (code: string, title: string, startsAt: string) =>
+    request<Meeting>("POST", `/api/groups/${code}/meetings`, { title, startsAt }),
+  editDecision: (code: string, id: string, text: string) =>
+    request<Decision>("PATCH", `/api/groups/${code}/decisions/${id}`, { text }),
+  joinRoom: (code: string, meetingId: string | null) =>
+    request<{ roomKey: string }>("POST", "/api/rooms/join", { code, meetingId }),
+  roomView: (roomKey: string) => request<RoomView>("GET", `/api/rooms/${roomKey}/view`),
+  roomAction: (roomKey: string, action: string, body: object) =>
+    request<{ ok: true }>("POST", `/api/rooms/${roomKey}/${action}`, body),
+};
 
 export function Logo() {
   return (

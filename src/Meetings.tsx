@@ -1,14 +1,9 @@
 import { useState, type DragEvent, type FormEvent } from "react";
-import {
-  formatMeetingTime,
-  meetingStatus,
-  type Decision,
-  type Meeting,
-  type MeetingStatus,
-} from "./model";
 import type { RoomView } from "./api";
+import { formatMeetingTime, meetingStatus, type Decision, type Meeting, type MeetingStatus } from "./model";
 
 type Agreement = NonNullable<RoomView["agreement"]>;
+type Act = (action: string, body: object) => Promise<void>;
 
 export type Zone = {
   onDragOver: (event: DragEvent) => void;
@@ -16,13 +11,17 @@ export type Zone = {
   onDrop: (event: DragEvent) => void;
 };
 
-/** The chat room's middle panel: the decision log for the meeting happening now (or next). */
+/**
+ * The chat room's middle panel: the decision log of the meeting happening now (or next).
+ * Only the Moderator adds decisions (after everyone agrees); members can fix the wording.
+ * Dropping a message here proposes it, and the Moderator opens an agreement check.
+ */
 export default function CurrentLog({
   meeting,
   decisions,
   open,
   onToggle,
-  onRecord,
+  onEdit,
   onSchedule,
   onOpenGroup,
   zone,
@@ -37,8 +36,8 @@ export default function CurrentLog({
   decisions: Decision[];
   open: boolean;
   onToggle: () => void;
-  onRecord: (text: string) => void;
-  onSchedule: (title: string, startsAt: string) => void;
+  onEdit: (id: string, text: string) => Promise<void>;
+  onSchedule: (title: string, startsAt: string) => Promise<void>;
   onOpenGroup: () => void;
   zone: Zone;
   over: boolean;
@@ -46,9 +45,8 @@ export default function CurrentLog({
   flash: boolean;
   agreement: Agreement | null;
   isHost: boolean;
-  act: (action: string, body: object) => Promise<void>;
+  act: Act;
 }) {
-  const [draft, setDraft] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const status = meeting ? meetingStatus(meeting) : null;
   const panelClass = [
@@ -58,18 +56,12 @@ export default function CurrentLog({
     dragging ? "active" : "",
     flash ? "flash" : "",
   ].join(" ");
-  const dropLabel = meeting ? `Drop into ${meeting.title}` : "Drop to record a decision";
+  const dropLabel = "Drop to propose it for an agreement check";
 
   if (!open) {
     return (
       <section className={panelClass} {...zone}>
-        <button
-          className="log-rail"
-          type="button"
-          onClick={onToggle}
-          aria-label="Expand decision log"
-          aria-expanded="false"
-        >
+        <button className="log-rail" type="button" onClick={onToggle} aria-label="Expand decision log" aria-expanded="false">
           <span className="rail-icon" aria-hidden="true">
             ✓
           </span>
@@ -81,12 +73,7 @@ export default function CurrentLog({
     );
   }
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!draft.trim()) return;
-    onRecord(draft);
-    setDraft("");
-  }
+  const checking = agreement?.status === "collecting";
 
   return (
     <section className={panelClass} {...zone}>
@@ -95,16 +82,9 @@ export default function CurrentLog({
           <h2>
             Decision log <span className="count">{decisions.length}</span>
           </h2>
-          <p>Only for the current meeting</p>
+          <p>Recorded by the Moderator when everyone agrees</p>
         </div>
-        <button
-          className="icon-btn"
-          type="button"
-          onClick={onToggle}
-          aria-label="Collapse decision log"
-          aria-expanded="true"
-          title="Collapse"
-        >
+        <button className="icon-btn" type="button" onClick={onToggle} aria-label="Collapse decision log" aria-expanded="true" title="Collapse">
           ⇥
         </button>
       </header>
@@ -122,17 +102,15 @@ export default function CurrentLog({
         </div>
       ) : null}
 
-      {agreement ? <AgreementBox agreement={agreement} isHost={isHost} act={act} /> : null}
+      {agreement && agreement.status !== "cancelled" ? (
+        <AgreementBox agreement={agreement} isHost={isHost} act={act} />
+      ) : null}
 
       <div className="thread">
         {!meeting && !scheduling ? (
           <div className="empty">
             <p>No meeting today or coming up. Schedule one to start its decision log.</p>
-            <button
-              className="btn small schedule-btn"
-              type="button"
-              onClick={() => setScheduling(true)}
-            >
+            <button className="btn small schedule-btn" type="button" onClick={() => setScheduling(true)}>
               + Schedule a meeting
             </button>
           </div>
@@ -140,31 +118,25 @@ export default function CurrentLog({
         {!meeting && scheduling ? (
           <ScheduleForm
             onCancel={() => setScheduling(false)}
-            onSubmit={(title, startsAt) => {
-              onSchedule(title, startsAt);
+            onSubmit={async (title, startsAt) => {
+              await onSchedule(title, startsAt);
               setScheduling(false);
             }}
           />
         ) : null}
         {meeting && decisions.length === 0 ? (
-          <p className="empty">Drop a message here when the team agrees on something.</p>
+          <div className="empty">
+            <p>Nothing agreed yet.</p>
+            <p className="small-note">
+              When the team settles something in the chat, the Moderator checks that everyone read it the same way and
+              records it here. To propose something yourself, drag a message onto this panel.
+            </p>
+          </div>
         ) : null}
-        {decisions.length > 0 ? <DecisionList decisions={decisions} /> : null}
+        {decisions.length > 0 ? <DecisionList decisions={decisions} onEdit={onEdit} /> : null}
       </div>
 
-      <form className="composer log-composer" onSubmit={submit}>
-        <div className="composer-row">
-          <input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Write a decision"
-            aria-label="Write a decision"
-          />
-          <button className="btn primary small" type="submit" disabled={!draft.trim()}>
-            Record
-          </button>
-        </div>
-      </form>
+      {isHost ? <HostTools act={act} checking={checking} /> : null}
       <button className="past-link" type="button" onClick={onOpenGroup}>
         Schedule & past decision logs ›
       </button>
@@ -173,21 +145,83 @@ export default function CurrentLog({
   );
 }
 
-/** The moderator's agreement check, as everyone sees it. Who answered what is never shown. */
-function AgreementBox({
-  agreement,
-  isHost,
-  act,
-}: {
-  agreement: Agreement;
-  isHost: boolean;
-  act: (action: string, body: object) => Promise<void>;
-}) {
+/** Host-only shortcuts to the Moderator. */
+function HostTools({ act, checking }: { act: Act; checking: boolean }) {
+  const [angle, setAngle] = useState("");
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+
+  async function run(action: string, body: object, done: string) {
+    setBusy(true);
+    setNote("");
+    try {
+      await act(action, body);
+      setNote(done);
+      setAngle("");
+      setAsking(false);
+    } catch (caught) {
+      setNote(caught instanceof Error ? caught.message : "That did not work.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="host-tools">
+      <span className="host-label">Host</span>
+      {asking ? (
+        <form
+          className="angle-form"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            if (angle.trim()) void run("angle", { angle: angle.trim() }, "Asked the agents privately.");
+          }}
+        >
+          <input
+            value={angle}
+            onChange={(event) => setAngle(event.target.value)}
+            placeholder="An angle nobody raised, e.g. real campus data"
+            aria-label="Angle to ask about"
+            autoFocus
+          />
+          <button className="btn primary small" type="submit" disabled={busy || !angle.trim()}>
+            Ask
+          </button>
+          <button className="btn ghost small" type="button" onClick={() => setAsking(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <div className="host-buttons">
+          <button className="btn ghost small" type="button" disabled={busy} onClick={() => setAsking(true)}>
+            Ask about an angle
+          </button>
+          {!checking ? (
+            <button
+              className="btn ghost small"
+              type="button"
+              disabled={busy}
+              onClick={() => void run("check/start", {}, "The Moderator is checking the latest proposal.")}
+            >
+              Check agreement now
+            </button>
+          ) : null}
+        </div>
+      )}
+      {note ? <p className="host-note">{note}</p> : null}
+    </div>
+  );
+}
+
+/** The Moderator's agreement check as everyone sees it. Who answered what is never shown. */
+function AgreementBox({ agreement, isHost, act }: { agreement: Agreement; isHost: boolean; act: Act }) {
   const [revising, setRevising] = useState(false);
   const [revision, setRevision] = useState(agreement.decision);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const { status, answered, askedOf, approvedCount } = agreement;
+  const { status, answered, askedOf } = agreement;
+  const total = agreement.total ?? askedOf;
 
   async function run(action: string, body: object) {
     setBusy(true);
@@ -206,15 +240,15 @@ function AgreementBox({
     status === "collecting"
       ? "Checking agreement"
       : status === "aligned"
-        ? `Agreed ${agreement.agreed ?? approvedCount}/${agreement.total ?? askedOf}`
-        : `Not aligned yet · approved ${agreement.agreed ?? approvedCount}/${agreement.total ?? askedOf}`;
+        ? `Agreed ${total}/${total}`
+        : `Not agreed yet · Agreement ${agreement.agreed ?? 0}/${total}`;
 
   return (
     <div className={`agreement ${status}`}>
       <p className="agreement-title">
         <span className="agreement-dot" aria-hidden="true" />
         {title}
-        {agreement.version > 1 ? <em> · v{agreement.version}</em> : null}
+        {agreement.version > 1 ? <em> · version {agreement.version}</em> : null}
       </p>
       <p className="agreement-decision">{agreement.decision}</p>
       {status === "collecting" ? (
@@ -223,17 +257,30 @@ function AgreementBox({
             <span style={{ width: `${askedOf ? (answered / askedOf) * 100 : 0}%` }} />
           </div>
           <p className="agreement-meta">
-            {answered}/{askedOf} answered privately · {approvedCount} approved
+            {answered}/{askedOf} answered privately. Answer the card in your own window.
           </p>
         </>
       ) : status === "mismatch" ? (
-        <p className="agreement-meta">The moderator asked the team one anonymous question in the chat.</p>
-      ) : null}
+        <div className="agreement-next">
+          <p>
+            <strong>What now?</strong> The Moderator asked one question in the chat. Talk it through there. When
+            someone states the version the team settles on, the Moderator checks it again automatically.
+          </p>
+          {isHost ? <p>As host, you can also revise the proposal yourself.</p> : null}
+        </div>
+      ) : (
+        <p className="agreement-meta">Saved to the decision log below.</p>
+      )}
 
       {isHost && status !== "aligned" ? (
         revising ? (
           <div className="agreement-revise">
-            <input value={revision} onChange={(event) => setRevision(event.target.value)} aria-label="Revised proposal" />
+            <textarea
+              rows={2}
+              value={revision}
+              onChange={(event) => setRevision(event.target.value)}
+              aria-label="Revised proposal"
+            />
             <div className="schedule-actions">
               <button className="btn ghost small" type="button" onClick={() => setRevising(false)}>
                 Cancel
@@ -244,16 +291,25 @@ function AgreementBox({
                 disabled={busy || !revision.trim() || revision.trim() === agreement.decision}
                 onClick={() => run("check/revise", { checkId: agreement.checkId, decision: revision })}
               >
-                Ask again
+                Ask everyone again
               </button>
             </div>
           </div>
         ) : (
           <div className="agreement-host">
-            <span>Host</span>
             {status === "collecting" && answered >= 2 && answered < askedOf ? (
               <button className="btn ghost small" type="button" disabled={busy} onClick={() => run("check/compare", {})}>
                 Compare now
+              </button>
+            ) : null}
+            {status === "collecting" ? (
+              <button
+                className="btn ghost small"
+                type="button"
+                disabled={busy}
+                onClick={() => run("check/cancel", { checkId: agreement.checkId })}
+              >
+                Close check
               </button>
             ) : null}
             <button
@@ -274,19 +330,96 @@ function AgreementBox({
   );
 }
 
-export function DecisionList({ decisions }: { decisions: Decision[] }) {
+/** Agreed decisions. With `onEdit`, members can correct the wording; the agreed original is kept. */
+export function DecisionList({
+  decisions,
+  onEdit,
+}: {
+  decisions: Decision[];
+  onEdit?: (id: string, text: string) => Promise<void>;
+}) {
   return (
     <ol className="decision-list">
       {decisions.map((decision) => (
-        <li className="decision" key={decision.id}>
-          <span className="decision-dot" aria-hidden="true" />
-          <div>
-            <p className="decision-text">{decision.text}</p>
-            <p className="decision-meta">{decision.author}</p>
-          </div>
-        </li>
+        <DecisionItem key={decision.id} decision={decision} onEdit={onEdit} />
       ))}
     </ol>
+  );
+}
+
+function DecisionItem({
+  decision,
+  onEdit,
+}: {
+  decision: Decision;
+  onEdit?: (id: string, text: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(decision.text);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!onEdit || !value.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onEdit(decision.id, value.trim());
+      setEditing(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <li className="decision">
+      <span className="decision-dot" aria-hidden="true" />
+      <div className="decision-body">
+        {editing ? (
+          <div className="decision-edit">
+            <textarea rows={2} value={value} onChange={(event) => setValue(event.target.value)} aria-label="Decision wording" />
+            <div className="schedule-actions">
+              <button
+                className="btn ghost small"
+                type="button"
+                onClick={() => {
+                  setValue(decision.text);
+                  setEditing(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button className="btn primary small" type="button" disabled={saving || !value.trim()} onClick={save}>
+                Save
+              </button>
+            </div>
+            {error ? <p className="error small-note">{error}</p> : null}
+          </div>
+        ) : (
+          <p className="decision-text">{decision.text}</p>
+        )}
+        <p className="decision-meta" title={decision.text !== decision.original ? `Agreed wording: ${decision.original}` : undefined}>
+          {decision.agreed ? `Agreed ${decision.agreed}` : "Agreed"}
+          {decision.editedBy ? ` · edited by ${decision.editedBy}` : ""}
+        </p>
+      </div>
+      {onEdit && !editing ? (
+        <button
+          className="icon-btn small edit-btn"
+          type="button"
+          onClick={() => {
+            setValue(decision.text);
+            setEditing(true);
+          }}
+          aria-label="Edit wording"
+          title="Edit wording"
+        >
+          ✎
+        </button>
+      ) : null}
+    </li>
   );
 }
 
@@ -315,39 +448,36 @@ export function ScheduleForm({
   onSubmit,
   onCancel,
 }: {
-  onSubmit: (title: string, startsAt: string) => void;
+  onSubmit: (title: string, startsAt: string) => Promise<void> | void;
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [when, setWhen] = useState(defaultWhen);
+  const [error, setError] = useState("");
   const valid = title.trim().length > 0 && !Number.isNaN(new Date(when).getTime());
 
   return (
     <form
       className="schedule-form"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
-        if (valid) onSubmit(title.trim(), new Date(when).toISOString());
+        if (!valid) return;
+        try {
+          await onSubmit(title.trim(), new Date(when).toISOString());
+        } catch (caught) {
+          setError(caught instanceof Error ? caught.message : "Could not schedule it.");
+        }
       }}
     >
       <label>
         Meeting
-        <input
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="User testing meeting"
-          maxLength={60}
-          autoFocus
-        />
+        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="User testing meeting" maxLength={60} autoFocus />
       </label>
       <label>
         Date & time
-        <input
-          type="datetime-local"
-          value={when}
-          onChange={(event) => setWhen(event.target.value)}
-        />
+        <input type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} />
       </label>
+      {error ? <p className="error small-note">{error}</p> : null}
       <div className="schedule-actions">
         <button className="btn ghost small" type="button" onClick={onCancel}>
           Cancel

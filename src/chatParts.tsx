@@ -1,5 +1,5 @@
 // Pieces shared by the team chat and the private window: bubbles, composer, drag and drop.
-import type { DragEvent, FormEvent, ReactNode } from "react";
+import { useLayoutEffect, useRef, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Avatar } from "./ui";
 
 export type Source = "team" | "agent" | "user";
@@ -183,11 +183,11 @@ export function Composer({
         </div>
       ) : null}
       <div className="composer-row">
-        <input
+        <GrowingInput
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={onChange}
           placeholder={quote ? quotePlaceholder : placeholder}
-          aria-label={placeholder}
+          label={placeholder}
         />
         <button className="btn primary small" type="submit" disabled={!canSend || busy}>
           {busy ? "..." : "Send"}
@@ -197,6 +197,50 @@ export function Composer({
         <span>{dropLabel}</span>
       </div>
     </form>
+  );
+}
+
+/**
+ * A text box that wraps and grows downwards (up to about six lines) instead of scrolling sideways.
+ * Enter sends, Shift+Enter adds a line; Enter while composing Korean/Japanese text is left alone.
+ */
+export function GrowingInput({
+  value,
+  onChange,
+  placeholder,
+  label,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  label: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${Math.min(box.scrollHeight, 132)}px`;
+  }, [value]);
+
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
+
+  return (
+    <textarea
+      ref={ref}
+      className="growing-input"
+      rows={1}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      aria-label={label}
+    />
   );
 }
 

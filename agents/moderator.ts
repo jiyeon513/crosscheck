@@ -37,7 +37,15 @@ export async function findMissingAngle(input: MissingAngleInput, log?: Log): Pro
 
 // ---------- 2. Is the team settling on a decision? (called on each new group message) ----------
 
-export type DetectDecisionInput = { goal: string; group: ChatLine[]; trigger: "new_message" | "host_request" };
+export type DetectDecisionInput = {
+  goal: string;
+  group: ChatLine[];
+  trigger: "new_message" | "host_request";
+  /** The proposal of the agreement check that is collecting answers now, if any. */
+  openProposal?: string | null;
+  /** Decisions this meeting already agreed on. Re-confirming one of them is not a new decision. */
+  agreed?: string[];
+};
 
 export async function detectDecision(input: DetectDecisionInput, log?: Log): Promise<DecisionDetection> {
   const newest = input.group[input.group.length - 1];
@@ -48,6 +56,8 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
       trigger: input.trigger,
       earlierChat: formatChat(input.group.slice(0, -1)),
       newestMessage: newest ? `[${newest.author}] ${newest.text}` : "(none)",
+      openProposal: input.openProposal?.trim() || "(none)",
+      agreedDecisions: formatList(input.agreed ?? []),
     },
     input, log,
   );

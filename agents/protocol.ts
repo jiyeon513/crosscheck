@@ -11,6 +11,8 @@ export type ChatLine = { id?: string; author: string; text: string; kind?: "user
 /** Extra structured info on a moderator message, so the UI can render it without parsing text. */
 export type ModeratorNote =
   | { type: "angle_prompt"; angle: string }
+  | { type: "check_opened"; version: number }
+  | { type: "check_closed" }
   | { type: "agreement_count"; agreed: number; total: number }
   | { type: "agreed"; agreed: number; total: number; statement: string }
   | { type: "concern" };
@@ -23,7 +25,11 @@ export type GroupMessage = {
   at: number;
   note?: ModeratorNote;
   anonymous?: boolean;
+  /** The message this one replies to. The agents read it as part of the message. */
+  quote?: Quote;
 };
+
+export type Quote = { author: string; text: string };
 
 // ---------- private window (one per participant) ----------
 
@@ -128,7 +134,7 @@ export type Check = {
   decision: string;
   question: string;
   options: string[];
-  status: "collecting" | "aligned" | "mismatch";
+  status: "collecting" | "aligned" | "mismatch" | "cancelled";
   askedOf: string[]; // participants when the check started
   answers: Record<string, string>; // participant -> label. Names never reach the moderator LLM.
   concerns: string[]; // anonymous labels

@@ -9,6 +9,7 @@ import type {
   UnderstandingCheckCard,
 } from "../agents/protocol";
 import type { RoomView } from "./api";
+import { isUnsure } from "./model";
 import { Bubble, Composer, Typing, type Source, type Zone } from "./chatParts";
 
 /** What the next private message refers to. */
@@ -230,7 +231,7 @@ function ShareCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; 
       <p className="pcard-kicker">{SOURCE_LABEL[card.source]}</p>
       <p className="pcard-nudge">{card.nudge}</p>
       {open ? (
-        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={2} aria-label="Draft to share" />
+        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Draft to share" />
       ) : (
         <p className="pcard-draft">{card.draft}</p>
       )}
@@ -275,7 +276,7 @@ function ConcernCardView({ card, act, onAsk }: { card: ConcernCard; act: Act; on
     <article className={`pcard concern ${card.status}`}>
       <p className="pcard-kicker">Concern · {card.label}</p>
       {open ? (
-        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={2} aria-label="Concern to raise" />
+        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Concern to raise" />
       ) : (
         <p className="pcard-draft">{card.draft}</p>
       )}
@@ -315,14 +316,14 @@ function ConcernCardView({ card, act, onAsk }: { card: ConcernCard; act: Act; on
 function CheckCard({ card, act, onAsk }: { card: UnderstandingCheckCard; act: Act; onAsk: (text: string) => void }) {
   const [choice, setChoice] = useState(card.answer ?? "");
   const [own, setOwn] = useState("");
-  const [approve, setApprove] = useState(card.approved ?? false);
   const [editing, setEditing] = useState(card.status === "open");
   const { busy, error, run } = useCardAction(act);
   const closed = card.status === "closed";
   const label = choice === "__own__" ? own.trim() : choice;
 
   async function submit() {
-    await run("check/answer", { checkId: card.checkId, label, approve });
+    // Picking a reading means "I agree, as I read it"; "Not sure yet" does not count as agreeing.
+    await run("check/answer", { checkId: card.checkId, label, approve: !isUnsure(label) });
     setEditing(false);
   }
 
@@ -365,21 +366,20 @@ function CheckCard({ card, act, onAsk }: { card: UnderstandingCheckCard; act: Ac
               />
             </label>
           </div>
-          <label className="approve">
-            <input type="checkbox" checked={approve} onChange={(event) => setApprove(event.target.checked)} />
-            I approve this proposal
-          </label>
           <div className="pcard-actions">
             <button className="btn primary small" type="button" disabled={busy || !label} onClick={submit}>
               {card.status === "answered" ? "Update answer" : "Send answer"}
             </button>
           </div>
-          <p className="fine-left">Your answer goes to the moderator without your name.</p>
+          <p className="fine-left">
+            Pick how you understand it; that counts as agreeing with that reading. Choose “Not sure yet” if you are
+            not ready. The Moderator gets your answer without your name.
+          </p>
         </>
       ) : (
         <div className="pcard-answered">
           <p>
-            You answered <strong>{card.answer}</strong> · {card.approved ? "approved" : "not approved"}
+            You answered <strong>{card.answer}</strong>
           </p>
           <button className="btn ghost small" type="button" onClick={() => setEditing(true)}>
             Change

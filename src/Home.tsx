@@ -1,30 +1,32 @@
-import {
-  formatMeetingTime,
-  loadGroups,
-  meetingStatus,
-  meetingsFor,
-  nextMeeting,
-  type Profile,
-} from "./model";
-import { Logo } from "./api";
+import { useEffect, useState } from "react";
+import { api, Logo } from "./api";
+import { currentMeeting, formatDate, formatMeetingTime, meetingStatus, type GroupSummary } from "./model";
 import { Avatar } from "./ui";
 
 export default function Home({
-  profile,
+  me,
   onCreate,
   onJoin,
   onOpen,
   onShowCode,
   onLogout,
 }: {
-  profile: Profile;
+  me: string;
   onCreate: () => void;
   onJoin: () => void;
-  onOpen: (groupId: string) => void;
-  onShowCode: (groupId: string) => void;
+  onOpen: (code: string) => void;
+  onShowCode: (code: string) => void;
   onLogout: () => void;
 }) {
-  const groups = loadGroups();
+  const [groups, setGroups] = useState<GroupSummary[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api
+      .groups()
+      .then(setGroups)
+      .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not load your groups."));
+  }, []);
 
   return (
     <main className="screen scroll">
@@ -32,8 +34,8 @@ export default function Home({
         <Logo />
         <div className="header-actions">
           <span className="me">
-            <Avatar name={profile.name} />
-            {profile.name}
+            <Avatar name={me} />
+            {me}
           </span>
           <button className="btn ghost small" type="button" onClick={onLogout}>
             Log out
@@ -42,10 +44,10 @@ export default function Home({
       </header>
       <section className="page">
         <div className="page-copy">
-          <h1>Hi {profile.name}, what's next?</h1>
+          <h1>Hi {me}, what's next?</h1>
           <p>
-            Start a group for your team project, or join one with an invitation code. Each group
-            keeps one ongoing chat and a decision log for every meeting.
+            Start a group for your team project, or join one with an invitation code. Each group keeps one ongoing
+            chat and a decision log for every meeting.
           </p>
         </div>
 
@@ -78,18 +80,18 @@ export default function Home({
 
         <section className="group-section">
           <h2>Your groups</h2>
-          {groups.length === 0 ? (
-            <p className="muted">Groups you create or join will show up here.</p>
-          ) : (
+          {error ? <p className="error">{error}</p> : null}
+          {groups === null && !error ? <p className="muted">Loading...</p> : null}
+          {groups?.length === 0 ? <p className="muted">Groups you create or join will show up here.</p> : null}
+          {groups && groups.length > 0 ? (
             <div className="group-list">
               {groups.map((group) => {
-                const next = nextMeeting(group.id);
-                const all = meetingsFor(group.id);
-                const done = all.filter((item) => meetingStatus(item) === "past").length;
-                const ahead = all.length - done;
+                const next = currentMeeting(group.meetings);
+                const done = group.meetings.filter((item) => meetingStatus(item) === "past").length;
+                const ahead = group.meetings.length - done;
                 return (
-                  <article className="group-card" key={group.id}>
-                    <button className="group-open" type="button" onClick={() => onOpen(group.id)}>
+                  <article className="group-card" key={group.code}>
+                    <button className="group-open" type="button" onClick={() => onOpen(group.code)}>
                       <span className="group-initial" aria-hidden="true">
                         {group.title.trim().charAt(0).toUpperCase() || "#"}
                       </span>
@@ -98,7 +100,7 @@ export default function Home({
                         <span>
                           {next
                             ? `Next: ${next.title} · ${formatMeetingTime(next.startsAt)}`
-                            : `No upcoming meeting · last opened ${formatDate(group.openedAt)}`}
+                            : `No upcoming meeting · ${group.members.length} member${group.members.length === 1 ? "" : "s"} · opened ${formatDate(group.openedAt)}`}
                         </span>
                       </span>
                       <span className="group-stats" aria-label={`${done} done, ${ahead} upcoming`}>
@@ -109,7 +111,7 @@ export default function Home({
                     <button
                       className="code-chip"
                       type="button"
-                      onClick={() => onShowCode(group.id)}
+                      onClick={() => onShowCode(group.code)}
                       title="Show invitation code"
                     >
                       {group.code.toUpperCase()}
@@ -118,13 +120,9 @@ export default function Home({
                 );
               })}
             </div>
-          )}
+          ) : null}
         </section>
       </section>
     </main>
   );
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

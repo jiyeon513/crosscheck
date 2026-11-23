@@ -6,3 +6,6 @@ dist
 
 # agent test output
 tests/results/
+
+# server data (accounts, groups, chats)
+data/

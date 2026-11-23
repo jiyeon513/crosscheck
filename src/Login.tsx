@@ -1,17 +1,27 @@
 import { useState, type FormEvent } from "react";
-import { Logo } from "./api";
-import { saveProfile, type Profile } from "./model";
+import { api, Logo } from "./api";
 
-export default function Login({ onLogin }: { onLogin: (profile: Profile) => void }) {
+export default function Login({ onLogin }: { onLogin: (name: string) => void }) {
+  const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const signup = mode === "signup";
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const profile = { name: trimmed };
-    saveProfile(profile);
-    onLogin(profile);
+    if (!name.trim() || !password) return;
+    setError("");
+    setPending(true);
+    try {
+      const signedIn = signup ? await api.signUp(name.trim(), password) : await api.logIn(name.trim(), password);
+      onLogin(signedIn);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not sign in.");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -27,9 +37,7 @@ export default function Login({ onLogin }: { onLogin: (profile: Profile) => void
               Clickable Figma flow, then coding
             </div>
           </div>
-          <p className="auth-tagline">
-            Talk with your team, think with your agent, and keep what you decide.
-          </p>
+          <p className="auth-tagline">Talk with your team, think with your agent, and keep what you decide.</p>
         </div>
       </section>
       <section className="auth-form-wrap">
@@ -37,23 +45,61 @@ export default function Login({ onLogin }: { onLogin: (profile: Profile) => void
           <div className="auth-mobile-logo">
             <Logo />
           </div>
-          <h1>Welcome</h1>
-          <p className="muted">Log in with the name your team will see.</p>
+          <div className="auth-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!signup}
+              className={signup ? "" : "on"}
+              onClick={() => {
+                setMode("login");
+                setError("");
+              }}
+            >
+              Log in
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={signup}
+              className={signup ? "on" : ""}
+              onClick={() => {
+                setMode("signup");
+                setError("");
+              }}
+            >
+              Create account
+            </button>
+          </div>
+          <h1>{signup ? "Create your account" : "Welcome back"}</h1>
+          <p className="muted">
+            {signup ? "Your teammates will see this name." : "Log in to see your groups and meetings."}
+          </p>
           <label>
-            Your name
+            Name
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="e.g. Jia"
               maxLength={40}
               autoFocus
-              autoComplete="nickname"
+              autoComplete="username"
             />
           </label>
-          <button className="btn primary block" type="submit" disabled={!name.trim()}>
-            Log in
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={signup ? "At least 6 characters" : ""}
+              autoComplete={signup ? "new-password" : "current-password"}
+            />
+          </label>
+          {error ? <p className="error">{error}</p> : null}
+          <button className="btn primary block" type="submit" disabled={!name.trim() || !password || pending}>
+            {pending ? "..." : signup ? "Create account" : "Log in"}
           </button>
-          <p className="fine">Your name and chats are remembered on this device.</p>
         </form>
       </section>
     </main>

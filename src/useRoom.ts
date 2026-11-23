@@ -1,39 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, joinRoom, roomAction, roomView, type RoomView } from "./api";
-import type { Meeting, TeamMessage } from "./model";
+import { api, ApiError, type RoomView } from "./api";
 
 const POLL_MS = 1500;
 
 /**
- * The meeting room on the server (agents/meeting.ts) for this group's current meeting:
- * joins it, polls this participant's view, and sends actions.
+ * The server's meeting room (agents/meeting.ts) for one group meeting: joins it as the signed-in
+ * member, polls this member's view, and sends actions.
  */
-export function useRoom(input: {
-  code: string;
-  user: string;
-  groupTitle: string;
-  meeting: Meeting | null;
-  history: TeamMessage[];
-}) {
+export function useRoom(code: string, meetingId: string | null, enabled = true) {
   const [view, setView] = useState<RoomView | null>(null);
   const [error, setError] = useState("");
-  const session = useRef<{ roomKey: string; token: string } | null>(null);
+  const roomKey = useRef<string | null>(null);
   const joining = useRef<Promise<void> | null>(null);
-  const inputRef = useRef(input);
-  inputRef.current = input;
-  const meetingId = input.meeting?.id ?? "general";
+  const target = useRef({ code, meetingId });
+  target.current = { code, meetingId };
 
   const join = useCallback(async () => {
-    const { code, user, groupTitle, meeting, history } = inputRef.current;
-    joining.current ??= joinRoom({
-      code,
-      user,
-      groupTitle,
-      meeting: meeting ? { id: meeting.id, title: meeting.title, startsAt: meeting.startsAt } : null,
-      history: history.map(({ author, text, createdAt }) => ({ author, text, createdAt })),
-    })
+    joining.current ??= api
+      .joinRoom(target.current.code, target.current.meetingId)
       .then((result) => {
-        session.current = { roomKey: result.roomKey, token: result.sessionToken };
+        roomKey.current = result.roomKey;
       })
       .finally(() => {
         joining.current = null;
@@ -41,17 +27,17 @@ export function useRoom(input: {
     return joining.current;
   }, []);
 
-  /** Runs a call; if the server lost the room (restart) or the session, joins again and retries once. */
-  const withSession = useCallback(
-    async <T,>(call: (roomKey: string, token: string) => Promise<T>): Promise<T> => {
-      if (!session.current) await join();
+  /** Runs a call; if the server lost the room (for example after a restart), joins again and retries once. */
+  const inRoom = useCallback(
+    async <T,>(call: (key: string) => Promise<T>): Promise<T> => {
+      if (!roomKey.current) await join();
       try {
-        return await call(session.current!.roomKey, session.current!.token);
+        return await call(roomKey.current!);
       } catch (caught) {
-        if (!(caught instanceof ApiError) || (caught.status !== 404 && caught.status !== 403)) throw caught;
-        session.current = null;
+        if (!(caught instanceof ApiError) || caught.status !== 404) throw caught;
+        roomKey.current = null;
         await join();
-        return call(session.current!.roomKey, session.current!.token);
+        return call(roomKey.current!);
       }
     },
     [join],
@@ -59,16 +45,17 @@ export function useRoom(input: {
 
   const refresh = useCallback(async () => {
     try {
-      setView(await withSession(roomView));
+      setView(await inRoom(api.roomView));
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not reach the meeting room.");
     }
-  }, [withSession]);
+  }, [inRoom]);
 
   useEffect(() => {
-    session.current = null;
+    roomKey.current = null;
     setView(null);
+    if (!enabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const loop = async () => {
@@ -80,15 +67,15 @@ export function useRoom(input: {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [input.code, input.user, meetingId, refresh]);
+  }, [code, meetingId, enabled, refresh]);
 
-  /** Sends an action, then refreshes the view. Throws so the caller can keep the user's draft. */
+  /** Sends an action, then refreshes the view. Throws so the caller can keep the member's draft. */
   const act = useCallback(
     async (action: string, body: object) => {
-      await withSession((roomKey, token) => roomAction(roomKey, token, action, body));
+      await inRoom((key) => api.roomAction(key, action, body));
       await refresh();
     },
-    [refresh, withSession],
+    [inRoom, refresh],
   );
 
   return { view, error, act, refresh };

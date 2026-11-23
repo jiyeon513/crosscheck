@@ -101,8 +101,12 @@ test("a private agreement check sends the proposal version and accepts only evid
   });
   assert.equal(check.suggested_option, "Hand count");
   assert.deepEqual(check.evidenceIds, ["p_2"]);
-  await assert.rejects(personal.suggestCheckAnswer(input, undefined, returns({ ...result, evidence: [] })));
-  await assert.rejects(personal.suggestCheckAnswer(input, undefined, returns({ ...result, suggested_option: "unlisted" })));
+  // An unsupported guess is dropped (the member still gets the question), not turned into an error.
+  for (const unsupported of [{ ...result, evidence: [] }, { ...result, suggested_option: "unlisted" }]) {
+    const dropped = await personal.suggestCheckAnswer(input, undefined, returns(unsupported));
+    assert.equal(dropped.suggested_option, null);
+    assert.deepEqual(dropped.evidenceIds, []);
+  }
   const neutral = await personal.suggestCheckAnswer(input, undefined, returns({
     suggested_option: null, why: "Which parts would you like to clarify?", evidence: [],
   }));

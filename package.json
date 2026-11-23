@@ -12,14 +12,13 @@
     "test:prompts": "tsx tests/run.ts",
     "test:moderator": "tsx tests/run.ts moderator",
     "test:personal": "tsx tests/run.ts personal",
-    "simulate": "tsx tests/simulate.ts"
+    "simulate": "tsx tests/simulate.ts",
+    "start": "NODE_ENV=production node --import tsx server/index.ts"
   },
   "dependencies": {
-    "@stream-io/node-sdk": "^0.9.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "stream-chat": "^10.2.0",
-    "stream-chat-react": "^15.0.2"
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
@@ -27,7 +26,6 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
-    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^7.2.4"
   },

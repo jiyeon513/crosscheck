@@ -14,6 +14,7 @@ import { llmInfo, type LLMRecord } from "./llm";
 import * as moderator from "./moderator";
 import * as personal from "./personal";
 import { DEFAULT_RULES, type Rules } from "./rules";
+import { isUnsure, norm } from "./format";
 import type {
   AgentToModerator,
   Card,
@@ -27,6 +28,7 @@ import type {
   ModeratorToAgent,
   PrivateItem,
   PrivateTurn,
+  Quote,
   ShareSuggestionCard,
   Stage,
   TraceEvent,
@@ -104,20 +106,23 @@ export class Meeting {
     }
   }
 
-  /** A participant posts in the group chat. */
-  async postGroupMessage(user: string, text: string): Promise<void> {
+  /** A participant posts in the group chat, optionally replying to (quoting) an earlier message. */
+  async postGroupMessage(user: string, text: string, options: { quote?: Quote } = {}): Promise<void> {
     this.requireUser(user);
     if (!text.trim()) throw new Error("Empty message");
-    await this.publish(user, text, false);
+    await this.publish(user, text, false, options.quote);
   }
 
-  private async publish(user: string, body: string, anonymous: boolean): Promise<void> {
+  private async publish(user: string, body: string, anonymous: boolean, quote?: Quote): Promise<void> {
     const msg = this.addGroup(anonymous ? "Anonymous" : user, "user", body);
     if (anonymous) msg.anonymous = true;
+    if (quote?.text?.trim()) msg.quote = { author: quote.author || "Someone", text: quote.text.trim() };
     this.log("user_to_group", anonymous ? "anonymous" : `user:${user}`, "group", {});
 
-    const jobs = [this.runReactions(msg, user)];
-    if (!this.checkOpen()) jobs.push(this.runDetect("new_message"));
+    // While members are answering a check, unprompted suggestion cards only distract; concerns still go through chat.
+    const jobs = this.checkOpen() ? [] : [this.runReactions(msg, user)];
+    // Detection also runs while a check is open, so a real decision can replace a false alarm.
+    jobs.push(this.runDetect("new_message"));
     await Promise.all(jobs);
   }
 
@@ -138,20 +143,22 @@ export class Meeting {
     const previous = this.chatJobs.get(user);
     this.typing.set(user, (this.typing.get(user) ?? 0) + 1);
     const job = (previous ?? Promise.resolve()).catch(() => {}).then(async () => {
-      if (card?.checkId && card.checkId !== this.check?.id) throw new Error("The proposal changed; select the current check");
-      const check = this.check;
+      const check = this.checkOpen() ? this.check : null;
       const proposal = check ? { id: check.id, version: check.version, decision: check.decision } : undefined;
       const res = await personal.chat({
         ...this.ownerContext(user), stage: this.stage, message: body, reference, proposal, intent: options.intent,
-      }, this.llmLog(`agent:${user}`)).catch(() => { throw new PersonalAgentUnavailable("Personal Agent could not complete the request. Check the server's OpenRouter configuration and retry."); });
-      if (check !== this.check && (card?.checkId || res.concern))
-        throw new Error("The proposal changed while you were chatting. Review the latest version and send again.");
+      }, this.llmLog(`agent:${user}`)).catch((error: unknown) => {
+        console.warn(`[CrossCheck] personal agent for ${user} failed:`, error instanceof Error ? error.message : error);
+        throw new PersonalAgentUnavailable("Your agent could not answer just now. Please try again.");
+      });
+      // Keep the exchange even if a new version opened meanwhile; a concern then belongs to the current check.
+      const current = this.checkOpen() ? this.check!.id : undefined;
       this.addPrivate(user, { type: "user", text: body });
       this.addPrivate(user, { type: "agent", text: res.reply });
       this.log("user_to_agent", `user:${user}`, `agent:${user}`, {});
-      if (res.share_draft) this.addSuggestion(user, "chat", res.reply, res.share_draft, [], card?.checkId);
+      if (res.share_draft) this.addSuggestion(user, "chat", "Draft for the team.", res.share_draft, [], current);
       if (res.concern) this.addCard(user, { kind: "concern", id: this.nextId("card"), label: res.concern.label,
-        draft: res.concern.draft, status: "open", checkId: check?.id });
+        draft: res.concern.draft, status: "open", checkId: current });
     });
     this.chatJobs.set(user, job);
     try {
@@ -189,7 +196,9 @@ export class Meeting {
 
   private validateShare(card: ShareSuggestionCard | ConcernCard, finalText: string): void {
     if (!finalText?.trim()) throw new Error("Confirm the final text to share");
-    if (card.checkId && card.checkId !== this.check?.id) throw new Error("The proposal changed; review the current check");
+    if (card.kind === "concern" && card.checkId && card.checkId !== this.check?.id && this.checkOpen()) {
+      throw new Error("The proposal changed; review the current check");
+    }
   }
 
   /** The user answers the agreement check in their private window. */
@@ -227,7 +236,50 @@ export class Meeting {
     if (!revised || revised === this.check.decision) throw new Error("Enter a revised proposal");
     const previous = this.decisions.find(record => record.checkId === checkId);
     if (previous) previous.supersededBy = this.check.version + 1;
-    await this.openCheck({ decision: revised, question: "How do you understand this revision?", options: [revised] });
+    await this.openCheck({ decision: revised, ...(await this.frame(user, revised)) });
+  }
+
+  /** Host only: close the open check without a result (for example a false alarm). */
+  cancelCheck(user: string, checkId: string): void {
+    this.requireHost(user);
+    const check = this.check;
+    if (!check || check.id !== checkId || check.status !== "collecting") throw new Error("This check is not open");
+    check.status = "cancelled";
+    this.closeCheckCards(check);
+    this.stage = "ideation";
+    this.moderatorSays("The host closed this agreement check. Carry on.", { type: "check_closed" });
+  }
+
+  /** Any member: put a proposal to the team. The Moderator opens an agreement check on exactly this text. */
+  async proposeDecision(user: string, text: string): Promise<void> {
+    this.requireUser(user);
+    const proposal = text.trim();
+    if (!proposal) throw new Error("Empty proposal");
+    if (this.alreadyAgreed(proposal)) throw new Error("The team already agreed on this");
+    this.addGroup(user, "user", `Proposal for the team: "${proposal}"`);
+    this.log("user_to_group", `user:${user}`, "group", { proposal: true });
+    await this.openCheck({ decision: proposal, ...(await this.frame(user, proposal)) });
+  }
+
+  /** Ask the Moderator how members might read a given proposal (question + options). */
+  private async frame(author: string, proposal: string): Promise<{ question: string; options: string[] }> {
+    const fallback = {
+      question: "Is this how you understood the proposal?",
+      options: ["Yes, as stated", "I understood it differently", "Not sure yet"],
+    };
+    try {
+      const d = await moderator.detectDecision({
+        goal: this.goal,
+        group: [...this.groupContext(), { author, text: proposal, kind: "user" }],
+        trigger: "host_request",
+        openProposal: null,
+        agreed: this.agreedStatements(),
+      }, this.llmLog("moderator"));
+      return d.is_decision && d.options.length >= 2 ? { question: d.question, options: d.options } : fallback;
+    } catch (error) {
+      console.warn("[CrossCheck] could not frame the proposal:", error instanceof Error ? error.message : error);
+      return fallback;
+    }
   }
 
   async requestAngle(user: string, angle: string, intent: "find_contribution" | "invite_brainstorm"): Promise<void> {
@@ -308,7 +360,9 @@ export class Meeting {
 
   /** A teammate posted. Each other member’s agent checks that member’s own statements for a connection. */
   private async runReactions(msg: GroupMessage, author: string): Promise<void> {
-    const others = this.participants.filter((p) => p !== author && this.hasOwnerMessages(p) && this.cooledDown(p));
+    const others = this.participants.filter(
+      (p) => p !== author && this.hasOwnerMessages(p) && this.cooledDown(p) && !this.hasOpenProactiveCard(p),
+    );
     await Promise.all(others.map(p => this.offerCurrent(p, "react", true, async context => {
       const res = await personal.react({ ...context, newMessage: msg }, this.llmLog(`agent:${p}`));
       return res.suggest ? res : null;
@@ -377,7 +431,6 @@ export class Meeting {
 
   /** Any stage: is the newest group message a decision? If yes, open an agreement check. */
   private async runDetect(trigger: "new_message" | "host_request"): Promise<void> {
-    if (this.checkOpen()) return;
     if (!this.pendingDetection || trigger === "host_request") this.pendingDetection = trigger;
     if (!this.detection) {
       this.detection = this.detectLatest().finally(() => { this.detection = undefined; });
@@ -386,21 +439,33 @@ export class Meeting {
   }
 
   private async detectLatest(): Promise<void> {
-    while (this.pendingDetection && !this.checkOpen()) {
+    while (this.pendingDetection) {
       const trigger = this.pendingDetection;
       this.pendingDetection = undefined;
       const previous = this.check;
+      const open = this.checkOpen() ? this.check : null;
       const group = this.groupContext();
-      const d = await moderator.detectDecision({ goal: this.goal, group, trigger }, this.llmLog("moderator"));
-      if (d.is_decision && this.check === previous && this.group.length === group.length) {
-        await this.openCheck(d);
-        this.pendingDetection = undefined;
+      const d = await moderator.detectDecision(
+        { goal: this.goal, group, trigger, openProposal: open?.decision ?? null, agreed: this.agreedStatements() },
+        this.llmLog("moderator"),
+      );
+      if (!d.is_decision || this.check !== previous || this.group.length !== group.length) continue;
+      if (this.alreadyAgreed(d.decision)) continue;
+      if (open) {
+        if (sameText(open.decision, d.decision)) continue;
+        // Replace the open check only while few have answered; otherwise let it finish first.
+        const answered = Object.keys(open.answers).length;
+        if (trigger !== "host_request" && answered / open.askedOf.length >= this.rules.supersedeBelowAnswered) continue;
       }
+      await this.openCheck(d);
+      this.pendingDetection = undefined;
     }
   }
 
   private async openCheck(d: Pick<DecisionDetection, "decision" | "question" | "options">): Promise<void> {
     const previous = this.check;
+    const replacing = previous?.status === "collecting";
+    if (previous && replacing) previous.status = "cancelled";
     // Old private cards remain readable, but cannot share or approve an obsolete proposal.
     if (previous) for (const user of this.participants) {
       for (const card of this.cards(user)) {
@@ -426,6 +491,11 @@ export class Meeting {
     this.lastCompared = "";
     this.stage = "agreement";
     this.toAgents({ type: "check_request", checkId: check.id, decision: d.decision, question: d.question, options: d.options });
+    this.moderatorSays(
+      `${replacing ? "Replacing the earlier check. " : ""}Agreement check${check.version > 1 ? ` (version ${check.version})` : ""}: ` +
+        `"${d.decision}" Please answer privately in your own window.`,
+      { type: "check_opened", version: check.version },
+    );
 
     for (const p of check.askedOf) this.addCheckCard(p, check);
     // Each agent pre-selects the option its own user most likely means. It arrives a moment after the card.
@@ -478,13 +548,26 @@ export class Meeting {
         // Record the exact proposal the users approved, never a model-generated paraphrase.
         check.statement = check.decision;
         this.decisions.push({ id: this.nextId("decision"), checkId: check.id, version: check.version, statement: check.decision, at: this.now() });
-        this.stage = "done";
+        // Back to ideas: the next topic can be brainstormed and decided in the same meeting.
+        this.stage = "ideation";
         this.moderatorSays(`Agreed ${approved}/${total}. ${check.decision}`, {
           type: "agreed", agreed: approved, total, statement: check.decision,
         });
       } else {
-        const message = [`Explicit approvals: ${approved}/${total}.`, res.anonymous_question].filter(Boolean).join(" ");
-        this.moderatorSays(message, { type: "agreement_count", agreed: approved, total });
+        // Not agreed: close this version and say what happens next.
+        // The count is the largest group of members who read it the same way (never who they are).
+        const sameReading = Math.max(0, ...res.groups
+          .filter((group) => !isUnsure(labels[group[0] - 1] ?? ""))
+          .map((group) => group.filter((i) => labels[i - 1] !== undefined).length));
+        check.status = "mismatch";
+        check.agreed = Math.min(sameReading, approved);
+        this.closeCheckCards(check);
+        const message = [
+          `Agreement ${check.agreed}/${total}.`,
+          res.anonymous_question,
+          "Keep talking here. When the team settles on a version, say it in the chat and I will check it again. The host can also revise the proposal.",
+        ].filter(Boolean).join(" ");
+        this.moderatorSays(message, { type: "agreement_count", agreed: check.agreed, total });
       }
     } finally {
       if (this.comparison === job) this.comparison = undefined;
@@ -497,6 +580,27 @@ export class Meeting {
 
   private checkOpen(): boolean {
     return this.check?.status === "collecting";
+  }
+
+  /** Statements the team agreed on in this meeting and that were not revised later. */
+  private agreedStatements(): string[] {
+    return this.decisions.filter((record) => record.supersededBy === undefined).map((record) => record.statement);
+  }
+
+  private alreadyAgreed(text: string): boolean {
+    return this.agreedStatements().some((statement) => sameText(statement, text));
+  }
+
+  private closeCheckCards(check: Check): void {
+    for (const user of this.participants) {
+      const card = this.checkCard(user, check.id);
+      if (card) card.status = "closed";
+    }
+  }
+
+  /** A share suggestion the member has not acted on yet. One is enough; more only add noise. */
+  private hasOpenProactiveCard(user: string): boolean {
+    return this.cards(user).some((c) => c.kind === "share_suggestion" && c.source !== "chat" && c.status === "open");
   }
 
   private requireUser(user: string): void {
@@ -514,7 +618,10 @@ export class Meeting {
 
   /** The group chat as the agents read it. This is ALL the moderator ever gets, plus labels. */
   private groupContext(): ChatLine[] {
-    return this.group.map(({ id, author, text, kind }) => ({ id, author, text, kind }));
+    return this.group.map(({ id, author, text, kind, quote }) => ({
+      id, author, kind,
+      text: quote ? `(replying to ${quote.author}: "${clip(quote.text)}") ${text}` : text,
+    }));
   }
 
   private privateTurns(user: string): PrivateTurn[] {
@@ -611,6 +718,16 @@ export class Meeting {
       ? { prompt: r.prompt, input: r.user, output: r.raw, mocked: r.mocked, ms: r.ms }
       : { prompt: r.prompt, mocked: r.mocked, ms: r.ms });
   }
+}
+
+function sameText(a: string, b: string): boolean {
+  const x = norm(a), y = norm(b);
+  return x === y || (x.length > 12 && y.length > 12 && (x.includes(y) || y.includes(x)));
+}
+
+function clip(text: string, max = 160): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > max ? `${line.slice(0, max - 3)}...` : line;
 }
 
 function shuffle<T>(items: T[]): T[] {

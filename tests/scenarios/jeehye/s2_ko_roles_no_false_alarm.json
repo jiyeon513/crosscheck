@@ -1,0 +1,22 @@
+{
+  "name": "S2 · Korean: dividing presentation roles. Tests that the moderator does NOT engage on reactions, pitches or silence while assigning work.",
+  "goal": "발표 준비 역할 나누기",
+  "host": "민수",
+  "participants": ["민수", "서연", "지우", "태호"],
+  "steps": [
+    { "title": "T1 · Jiwoo keeps a private note. Expected: private reply only.", "do": "private", "user": "지우", "text": "나는 슬라이드 디자인은 자신 있는데 데모 시연은 좀 긴장돼. 일단 기억해둬." },
+
+    { "title": "Assignment talk with reactions and a pitch. Expected: NO check opens on any of these.", "do": "group", "user": "민수", "text": "발표 준비 어떻게 나눌까? 슬라이드, 데모, 대본, 질문 대응 정도가 있을 것 같아." },
+    { "do": "group", "user": "서연", "text": "나는 데모 쪽 해볼게! 코드를 제일 많이 봤으니까." },
+    { "do": "group", "user": "태호", "text": "오 좋다 ㅋㅋ" },
+    { "do": "group", "user": "지우", "text": "슬라이드 만들자! 템플릿은 내가 찾아볼까?" },
+
+    { "title": "Silence while the team is assigning work, not brainstorming. Expected: moderator stays quiet (no angle).", "do": "wait", "seconds": 65 },
+
+    { "title": "A real decision. Expected: check opens in Korean; likely ambiguity is deadline or who does the rest.", "do": "group", "user": "민수", "text": "그럼 서연이 데모, 지우가 슬라이드, 나머지는 대본이랑 질문 대응을 나눠서 하자." },
+    { "do": "answer", "user": "민수", "prefer": "" },
+    { "do": "answer", "user": "서연", "prefer": "" },
+    { "do": "answer", "user": "지우", "prefer": "" },
+    { "do": "answer", "user": "태호", "prefer": "" }
+  ]
+}

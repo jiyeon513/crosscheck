@@ -46,7 +46,7 @@ export function settings() {
 
 export function llmInfo(): { mode: "mock" | "unconfigured" | "live"; model: string } {
   const s = settings();
-  return { mode: s.mock ? "mock" : s.apiKey ? "live" : "unconfigured", model: s.mock ? "mock" : PERSONAL_MODEL };
+  return { mode: s.mock ? "mock" : s.apiKey ? "live" : "unconfigured", model: s.mock ? "mock" : personalModel() };
 }
 
 // ---------- usage ----------
@@ -122,7 +122,11 @@ export function useFixtureGenerator(generator: FixtureGenerator): void {
   fixtureGenerator = generator;
 }
 
+/** Personal Agent model. It must support strict JSON-schema output on OpenRouter. */
 export const PERSONAL_MODEL = "openai/gpt-5-mini";
+export function personalModel(): string {
+  return process.env.PERSONAL_LLM_MODEL || PERSONAL_MODEL;
+}
 const OPENROUTER = "https://openrouter.ai/api/v1";
 
 async function complete<T>(
@@ -142,7 +146,7 @@ async function complete<T>(
   const baseUrl = schema ? OPENROUTER : s.baseUrl;
   if (!s.apiKey && (schema || baseUrl === OPENROUTER)) throw new Error("OPENROUTER_API_KEY is required on the API server.");
   const body: Record<string, unknown> = {
-    model: schema ? PERSONAL_MODEL : s.model,
+    model: schema ? personalModel() : s.model,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
     max_tokens: schema ? Math.max(2500, s.maxTokens) : s.maxTokens,
   };

@@ -1,101 +1,79 @@
-import { useState } from "react";
-import { getGroup, loadProfile, logout, type Profile } from "./model";
-import Login from "./Login";
-import Home from "./Home";
-import { CreateChat, InviteCode, JoinChat } from "./Start";
-import Room from "./Room";
+import { useEffect, useState } from "react";
+import { api, getToken, onSignedOut } from "./api";
 import GroupPage from "./Group";
+import Home from "./Home";
+import Login from "./Login";
+import Room from "./Room";
+import { CreateGroup, InviteCode, JoinGroup } from "./Start";
 
 type Route =
   | { screen: "home" }
   | { screen: "create" }
   | { screen: "join" }
-  | { screen: "invite"; groupId: string }
-  | { screen: "group"; groupId: string }
-  | { screen: "room"; groupId: string };
+  | { screen: "invite"; code: string }
+  | { screen: "group"; code: string }
+  | { screen: "room"; code: string };
 
 export default function App() {
-  const [profile, setProfile] = useState<Profile | null>(loadProfile);
+  const [me, setMe] = useState<string | null>(null);
+  const [checking, setChecking] = useState(Boolean(getToken()));
   const [route, setRoute] = useState<Route>({ screen: "home" });
-  const home = () => setRoute({ screen: "home" });
 
-  if (!profile) {
+  useEffect(() => {
+    onSignedOut(() => setMe(null));
+    if (!getToken()) return;
+    api
+      .me()
+      .then((result) => setMe(result.name))
+      .catch(() => setMe(null))
+      .finally(() => setChecking(false));
+  }, []);
+
+  if (checking) return <main className="screen loading" aria-busy="true" />;
+  if (!me) {
     return (
       <Login
-        onLogin={(next) => {
-          setProfile(next);
-          home();
+        onLogin={(name) => {
+          setMe(name);
+          setRoute({ screen: "home" });
         }}
       />
     );
   }
 
-  const signOut = () => {
-    logout();
-    setProfile(null);
-  };
+  const home = () => setRoute({ screen: "home" });
+  const toGroup = (code: string) => setRoute({ screen: "group", code });
 
   switch (route.screen) {
     case "create":
-      return (
-        <CreateChat
-          profile={profile}
-          onBack={home}
-          onCreated={(groupId) => setRoute({ screen: "invite", groupId })}
-        />
-      );
+      return <CreateGroup onBack={home} onCreated={(code) => setRoute({ screen: "invite", code })} />;
     case "join":
-      return (
-        <JoinChat
-          profile={profile}
-          onBack={home}
-          onJoined={(groupId) => setRoute({ screen: "group", groupId })}
-        />
-      );
-    case "invite": {
-      const group = getGroup(route.groupId);
-      if (!group) break;
-      return (
-        <InviteCode
-          group={group}
-          onBack={home}
-          onEnter={() => setRoute({ screen: "group", groupId: group.id })}
-        />
-      );
-    }
-    case "room": {
-      const group = getGroup(route.groupId);
-      if (!group) break;
-      return (
-        <Room
-          group={group}
-          profile={profile}
-          onBack={() => setRoute({ screen: "group", groupId: group.id })}
-        />
-      );
-    }
-    case "group": {
-      const group = getGroup(route.groupId);
-      if (!group) break;
+      return <JoinGroup onBack={home} onJoined={toGroup} />;
+    case "invite":
+      return <InviteCode code={route.code} onBack={home} onEnter={() => toGroup(route.code)} />;
+    case "group":
       return (
         <GroupPage
-          group={group}
-          profile={profile}
+          code={route.code}
+          me={me}
           onBack={home}
-          onOpenChat={() => setRoute({ screen: "room", groupId: group.id })}
+          onOpenChat={() => setRoute({ screen: "room", code: route.code })}
         />
       );
-    }
+    case "room":
+      return <Room code={route.code} me={me} onBack={() => toGroup(route.code)} />;
+    default:
+      return (
+        <Home
+          me={me}
+          onCreate={() => setRoute({ screen: "create" })}
+          onJoin={() => setRoute({ screen: "join" })}
+          onOpen={toGroup}
+          onShowCode={(code) => setRoute({ screen: "invite", code })}
+          onLogout={() => {
+            void api.logOut().then(() => setMe(null));
+          }}
+        />
+      );
   }
-
-  return (
-    <Home
-      profile={profile}
-      onCreate={() => setRoute({ screen: "create" })}
-      onJoin={() => setRoute({ screen: "join" })}
-      onOpen={(groupId) => setRoute({ screen: "group", groupId })}
-      onShowCode={(groupId) => setRoute({ screen: "invite", groupId })}
-      onLogout={signOut}
-    />
-  );
 }

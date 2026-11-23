@@ -50,8 +50,29 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function nonblank(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
-function requireFormat(valid: unknown): asserts valid {
-  if (!valid) throw new Error("The personal agent returned an invalid response. Please retry.");
+class InvalidAgentOutput extends Error {}
+
+function requireFormat(valid: unknown, reason = "invalid response"): asserts valid {
+  if (!valid) throw new InvalidAgentOutput(reason);
+}
+
+/** Run a model call and its validation; on invalid output, log why and ask the model once more. */
+async function withRetry<T>(label: string, attempt: () => Promise<T>): Promise<T> {
+  try {
+    return await attempt();
+  } catch (error) {
+    if (!(error instanceof InvalidAgentOutput)) throw error;
+    console.warn(`[personal/${label}] rejected model output (${error.message}); retrying once`);
+    try {
+      return await attempt();
+    } catch (again) {
+      if (again instanceof InvalidAgentOutput) {
+        console.warn(`[personal/${label}] rejected model output again (${again.message})`);
+        throw new Error("The personal agent returned an invalid response. Please retry.");
+      }
+      throw again;
+    }
+  }
 }
 function ownMessages(input: Base): Map<string, string> {
   const notes = new Map<string, string>();
@@ -110,20 +131,25 @@ function containsInternalId(input: Base, text: string, reference?: ChatInput["re
 }
 
 export async function chat(input: ChatInput, log?: Log, generate: Generate = callPersonalJSON): Promise<ChatResult> {
-  const data = await generate("personal/chat", {
-    ...context(input), stage: input.stage, message: input.message, reference: cardContext(input.reference), intent: input.intent ?? null,
-  }, chatSchema, log);
-  requireFormat(isObject(data) && nonblank(data.reply));
-  requireFormat(data.share_draft === null || nonblank(data.share_draft));
-  let concern: ChatResult["concern"] = null;
-  if (data.concern !== null) {
-    requireFormat(isObject(data.concern) && nonblank(data.concern.label) && nonblank(data.concern.draft));
-    requireFormat(data.share_draft === null);
-    concern = { label: data.concern.label.trim(), draft: data.concern.draft.trim() };
-  }
-  const draft = data.share_draft?.trim() ?? null;
-  requireFormat(!containsInternalId(input, [data.reply, draft, concern?.draft, concern?.label].join(" "), input.reference));
-  return { reply: data.reply.trim(), share_draft: draft, concern };
+  return withRetry("chat", async () => {
+    const data = await generate("personal/chat", {
+      ...context(input), stage: input.stage, message: input.message, reference: cardContext(input.reference), intent: input.intent ?? null,
+    }, chatSchema, log);
+    requireFormat(isObject(data) && nonblank(data.reply), "empty reply");
+    requireFormat(data.share_draft === null || nonblank(data.share_draft), "blank share_draft");
+    let concern: ChatResult["concern"] = null;
+    if (data.concern !== null) {
+      requireFormat(isObject(data.concern) && nonblank(data.concern.label) && nonblank(data.concern.draft), "incomplete concern");
+      concern = { label: data.concern.label.trim(), draft: data.concern.draft.trim() };
+    }
+    // At most one draft: when the model offers both, the concern is the one that matters to the decision.
+    const draft = concern ? null : data.share_draft?.trim() ?? null;
+    requireFormat(
+      !containsInternalId(input, [data.reply, draft, concern?.draft, concern?.label].join(" "), input.reference),
+      "internal id in text",
+    );
+    return { reply: data.reply.trim(), share_draft: draft, concern };
+  });
 }
 
 type Suggestion = { nudge: string; draft: string; evidenceIds: string[] };
@@ -134,9 +160,9 @@ async function suggest(input: Base, prompt: string, trigger: object, brainstorm:
   const notes = ownMessages(input);
   if (!brainstorm && !notes.size) return null;
   const data = await generate(prompt, { ...context(input), ...trigger }, suggestionSchema, log);
-  requireFormat(isObject(data) && ["none", "grounded", "brainstorm"].includes(String(data.kind)));
+  requireFormat(isObject(data) && ["none", "grounded", "brainstorm"].includes(String(data.kind)), "unknown kind");
   if (data.kind === "none") return null;
-  requireFormat(nonblank(data.nudge) && nonblank(data.draft));
+  requireFormat(nonblank(data.nudge) && nonblank(data.draft), "empty suggestion");
   const evidence = verifyEvidence(data.evidence, notes);
   if (!evidence || (data.kind === "grounded" ? !evidence.length : !brainstorm || evidence.length > 0)) return null;
   if (containsInternalId(input, data.nudge + " " + data.draft)) return null;
@@ -167,13 +193,16 @@ export async function angleReply(input: AngleReplyInput, log?: Log, generate: Ge
 }
 
 export async function suggestCheckAnswer(input: CheckSuggestInput, log?: Log, generate: Generate = callPersonalJSON): Promise<CheckSuggestion & { evidenceIds: string[] }> {
-  const data = await generate("personal/suggest_check_answer", {
-    ...context(input), decision: input.decision, question: input.question, options: input.options,
-  }, checkSchema, log);
-  requireFormat(isObject(data) && nonblank(data.why));
-  const evidence = verifyEvidence(data.evidence, ownMessages(input));
-  requireFormat(evidence !== null && !containsInternalId(input, data.why));
-  const choice = data.suggested_option;
-  requireFormat(choice === null || (nonblank(choice) && input.options.includes(choice) && evidence.length > 0));
-  return { suggested_option: choice, why: data.why.trim(), evidenceIds: evidence.map(e => e.id) };
+  return withRetry("suggest_check_answer", async () => {
+    const data = await generate("personal/suggest_check_answer", {
+      ...context(input), decision: input.decision, question: input.question, options: input.options,
+    }, checkSchema, log);
+    requireFormat(isObject(data) && nonblank(data.why), "empty why");
+    const evidence = verifyEvidence(data.evidence, ownMessages(input));
+    requireFormat(evidence !== null && !containsInternalId(input, data.why), "unverifiable evidence");
+    // An unsupported guess is dropped, not fatal: the member still gets the question.
+    const choice = data.suggested_option;
+    const supported = nonblank(choice) && input.options.includes(choice) && evidence.length > 0;
+    return { suggested_option: supported ? choice : null, why: data.why.trim(), evidenceIds: supported ? evidence.map(e => e.id) : [] };
+  });
 }
