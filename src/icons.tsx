@@ -1,31 +1,21 @@
-// Small inline icons (currentColor), so the Moderator and the Personal Agent are easy to tell apart.
+// Small inline icons (currentColor). Moderator ◆ and Personal Agent ◇ keep the original diamonds.
 
 type IconProps = { size?: number; className?: string };
 
-/** The Moderator: a hub that connects the team. */
+/** The Moderator: a filled diamond. */
 export function ModeratorIcon({ size = 16, className }: IconProps) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <path d="M12 12 5.5 6.5M12 12l6.5-5.5M12 12v7" />
-      </g>
-      <circle cx="12" cy="12" r="3.2" fill="currentColor" />
-      <circle cx="5" cy="6" r="2.4" fill="currentColor" opacity="0.75" />
-      <circle cx="19" cy="6" r="2.4" fill="currentColor" opacity="0.75" />
-      <circle cx="12" cy="20" r="2.4" fill="currentColor" opacity="0.75" />
+      <path d="M12 3 21 12 12 21 3 12Z" fill="currentColor" />
     </svg>
   );
 }
 
-/** The Personal Agent: a private assistant (sparkle). */
+/** The Personal Agent: an outlined diamond. */
 export function AgentIcon({ size = 16, className }: IconProps) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M10 3.5c.5 3.6 2.4 5.5 6 6-3.6.5-5.5 2.4-6 6-.5-3.6-2.4-5.5-6-6 3.6-.5 5.5-2.4 6-6Z"
-      />
-      <path fill="currentColor" opacity="0.7" d="M18 13c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3Z" />
+      <path d="M12 3.5 20.5 12 12 20.5 3.5 12Z" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" />
     </svg>
   );
 }
