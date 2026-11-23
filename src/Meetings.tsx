@@ -1,4 +1,5 @@
-import { useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { ModeratorIcon } from "./icons";
 import type { RoomView } from "./api";
 import { formatMeetingTime, meetingStatus, type Decision, type Meeting, type MeetingStatus } from "./model";
 
@@ -142,7 +143,7 @@ export default function CurrentLog({
 
 /** Shortcuts to the Moderator that any member can use. */
 /** Shortcuts to the Moderator that any member can use; shown above the team chat composer. */
-export function ModeratorTools({ act, checking }: { act: Act; checking: boolean }) {
+export function ModeratorTools({ act, checking, onDone }: { act: Act; checking: boolean; onDone?: () => void }) {
   const [angle, setAngle] = useState("");
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -156,6 +157,7 @@ export function ModeratorTools({ act, checking }: { act: Act; checking: boolean 
       setNote(done);
       setAngle("");
       setAsking(false);
+      onDone?.();
     } catch (caught) {
       setNote(caught instanceof Error ? caught.message : "That did not work.");
     } finally {
@@ -332,6 +334,48 @@ export function AgreementBox({
         )
       ) : null}
       {error ? <p className="error small-note">{error}</p> : null}
+    </div>
+  );
+}
+
+/** A Moderator button by the team chat input; it opens the "Ask the Moderator" actions only when needed. */
+export function ModeratorMenu({ act, checking }: { act: Act; checking: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="mod-menu" ref={ref}>
+      <button
+        type="button"
+        className={open ? "composer-icon-btn mod on" : "composer-icon-btn mod"}
+        aria-expanded={open}
+        aria-label="Ask the Moderator"
+        title="Ask the Moderator"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ModeratorIcon size={18} />
+      </button>
+      {open ? (
+        <div className="mod-popover" role="dialog" aria-label="Ask the Moderator">
+          <ModeratorTools act={act} checking={checking} onDone={() => setTimeout(() => setOpen(false), 1400)} />
+        </div>
+      ) : null}
     </div>
   );
 }

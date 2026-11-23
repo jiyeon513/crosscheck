@@ -14,6 +14,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { llmInfo } from "../agents/llm";
 import { bearer, HttpError, logIn, logOut, requireUser, signUp } from "./auth";
+import { serveFile, uploadFile } from "./files";
 import { createGroup, editDecision, groupDetail, joinGroup, listGroups, scheduleMeeting } from "./groups";
 import { errorStatus, joinRoom, roomAction, tickRooms } from "./rooms";
 import { store } from "./store";
@@ -96,9 +97,20 @@ export function startServer(port: number, host = "127.0.0.1") {
       res.writeHead(404).end();
       return;
     }
+    const fileMatch = path.match(/^\/api\/files\/([\w-]+)$/);
+    if (fileMatch && req.method === "GET") return serveFile(fileMatch[1], res);
     try {
-      const body = req.method === "POST" || req.method === "PATCH" ? await readJson(req) : {};
-      const result = await route(req.method ?? "GET", path, body, bearer(req.headers.authorization));
+      const token = bearer(req.headers.authorization);
+      // Uploads send raw bytes, not JSON.
+      const result =
+        req.method === "POST" && path === "/api/uploads"
+          ? await uploadFile(requireUser(token), req)
+          : await route(
+              req.method ?? "GET",
+              path,
+              req.method === "POST" || req.method === "PATCH" ? await readJson(req) : {},
+              token,
+            );
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
       res.end(JSON.stringify(result));
     } catch (error) {

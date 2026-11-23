@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { Meeting, PersonalAgentUnavailable } from "../agents/meeting";
 import type { Quote } from "../agents/protocol";
 import { HttpError } from "./auth";
+import { readAttachments } from "./files";
 import { findMeeting, memberGroup } from "./groups";
 import { store } from "./store";
 
@@ -48,6 +49,7 @@ function createRoom(code: string, meetingId: string, host: string): Room {
       ...(line.anonymous ? { anonymous: true } : {}),
       ...(line.quote ? { quote: line.quote } : {}),
       ...(line.note ? { note: line.note } : {}),
+      ...(line.attachments ? { attachments: line.attachments } : {}),
     });
   });
   // The silence trigger should wait for this meeting's own posts.
@@ -121,8 +123,9 @@ export async function roomAction(name: string, key: string, action: string, body
       };
     case "POST group": {
       const quote = readQuote(body.quote);
+      const attachments = readAttachments(name, body.attachments);
       const typed = text(body.text).trim();
-      return run(room, meeting.postGroupMessage(name, typed || quote?.text || "", { quote }));
+      return run(room, meeting.postGroupMessage(name, typed || (attachments ? "" : quote?.text || ""), { quote, attachments }));
     }
     case "POST private": {
       const intent = body.intent;
@@ -131,6 +134,7 @@ export async function roomAction(name: string, key: string, action: string, body
         cardId: text(body.cardId) || undefined,
         groupMessageId: text(body.groupMessageId) || undefined,
         intent,
+        attachments: readAttachments(name, body.attachments),
       });
       return acknowledge;
     }
@@ -198,6 +202,7 @@ function save(room: Room) {
       ...(line.anonymous ? { anonymous: true } : {}),
       ...(line.quote ? { quote: line.quote } : {}),
       ...(line.note ? { note: line.note } : {}),
+      ...(line.attachments ? { attachments: line.attachments } : {}),
     });
   }
   while (room.savedDecisions < meeting.decisions.length) {

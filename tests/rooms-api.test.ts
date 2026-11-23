@@ -121,3 +121,64 @@ test("accounts, groups, a meeting room with agents, an agreed decision and its l
     server.close();
   }
 });
+
+test("files and pictures: upload, attach to a team message, download; only pictures and PDFs render", async () => {
+  const server = startServer(0);
+  await once(server, "listening");
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const json = async (path: string, token: string, body?: object) => {
+    const r = await fetch(base + path, {
+      method: body ? "POST" : "GET",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = (await r.json()) as Json;
+    if (!r.ok) throw new Error(data.error);
+    return data;
+  };
+  const upload = async (token: string, name: string, type: string, bytes: Buffer) => {
+    const r = await fetch(base + "/api/uploads", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": type, "X-File-Name": encodeURIComponent(name) },
+      body: bytes,
+    });
+    const data = (await r.json()) as Json;
+    if (!r.ok) throw new Error(data.error);
+    return data;
+  };
+  try {
+    const ana = (await json("/api/auth/signup", "", { name: "Ana", password: "ana-secret" })).token;
+    const ben = (await json("/api/auth/signup", "", { name: "Ben", password: "ben-secret" })).token;
+    const group = await json("/api/groups", ana, { title: "Files" });
+    await json("/api/groups/join", ben, { code: group.code });
+    const key = (await json("/api/rooms/join", ana, { code: group.code })).roomKey;
+    await json("/api/rooms/join", ben, { code: group.code });
+
+    await assert.rejects(
+      fetch(base + "/api/uploads", { method: "POST", body: Buffer.from("x") }).then(async (r) => {
+        if (!r.ok) throw new Error(String(r.status));
+      }),
+      /401/,
+    );
+    const png = Buffer.from("89504e470d0a1a0a", "hex");
+    const picture = await upload(ana, "사진 sketch.png", "image/png", png);
+    assert.equal(picture.name, "사진 sketch.png");
+    await json(`/api/rooms/${key}/group`, ana, { text: "", attachments: [picture.id] });
+    const view = await json(`/api/rooms/${key}/view`, ben);
+    assert.equal(view.group.at(-1).attachments[0].url, picture.url);
+
+    const got = await fetch(base + picture.url);
+    assert.equal(got.headers.get("content-type"), "image/png");
+    assert.deepEqual(Buffer.from(await got.arrayBuffer()), png);
+
+    const page = await upload(ana, "evil.html", "text/html", Buffer.from("<script>alert(1)</script>"));
+    const served = await fetch(base + page.url);
+    assert.equal(served.headers.get("content-type"), "application/octet-stream");
+    assert.match(served.headers.get("content-disposition") ?? "", /^attachment/);
+
+    // Someone else's upload cannot be attached.
+    await assert.rejects(json(`/api/rooms/${key}/group`, ben, { text: "hi", attachments: [picture.id] }), /not found/);
+  } finally {
+    server.close();
+  }
+});

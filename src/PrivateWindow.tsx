@@ -10,7 +10,9 @@ import type {
 } from "../agents/protocol";
 import type { RoomView } from "./api";
 import { isUnsure } from "./model";
-import { Bubble, Composer, Typing, joinDraft, pasteToDraft, type Source, type Zone } from "./chatParts";
+import type { Attachment } from "../agents/protocol";
+import { Bubble, Composer, Typing, joinDraft, pasteToDraft, useAttachments, type Source, type Zone } from "./chatParts";
+import { AgentIcon } from "./icons";
 
 /** What the next private message refers to. */
 export type AgentReference =
@@ -19,7 +21,7 @@ export type AgentReference =
   | { kind: "text"; author: string; text: string };
 
 type Act = (action: string, body: object) => Promise<void>;
-type Local = { id: string; type: "user" | "failed"; text: string };
+type Local = { id: string; type: "user" | "failed"; text: string; attachments?: Attachment[] };
 
 export default function PrivateWindow({
   me,
@@ -43,6 +45,7 @@ export default function PrivateWindow({
   onDragState: (from: Source | null) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const files = useAttachments();
   const [sending, setSending] = useState(false);
   const [local, setLocal] = useState<Local[]>([]);
   const end = useRef<HTMLDivElement | null>(null);
@@ -56,11 +59,16 @@ export default function PrivateWindow({
   async function send(event: FormEvent) {
     event.preventDefault();
     const typed = draft.trim();
-    if ((!typed && !reference) || sending) return;
-    const body = messageFor(typed, reference);
-    const pending: Local = { id: crypto.randomUUID(), type: "user", text: body.text };
+    const attached = files.items;
+    if ((!typed && !reference && attached.length === 0) || sending || files.uploading > 0) return;
+    const body = {
+      ...messageFor(typed, reference),
+      ...(attached.length ? { attachments: attached.map((file) => file.id) } : {}),
+    };
+    const pending: Local = { id: crypto.randomUUID(), type: "user", text: body.text, attachments: attached };
     setLocal((current) => [...current.filter((item) => item.type !== "failed"), pending]);
     setDraft("");
+    files.clear();
     onReference(null);
     setSending(true);
     try {
@@ -68,6 +76,7 @@ export default function PrivateWindow({
       setLocal((current) => current.filter((item) => item.id !== pending.id));
     } catch (caught) {
       setDraft(typed);
+      files.set(attached);
       onReference(reference);
       setLocal((current) => [
         ...current.filter((item) => item.id !== pending.id),
@@ -87,7 +96,7 @@ export default function PrivateWindow({
       <header className="panel-head agent-head">
         <div className="agent-title">
           <span className="agent-mark" aria-hidden="true">
-            ◇
+            <AgentIcon size={18} />
           </span>
           <div>
             <h2>Personal agent</h2>
@@ -124,7 +133,15 @@ export default function PrivateWindow({
           ))}
           {local.map((item) =>
             item.type === "user" ? (
-              <Bubble key={item.id} from="user" mine author={me} text={item.text} onDragState={onDragState} />
+              <Bubble
+                key={item.id}
+                from="user"
+                mine
+                author={me}
+                text={item.text}
+                attachments={item.attachments}
+                onDragState={onDragState}
+              />
             ) : (
               <Bubble
                 key={item.id}
@@ -152,7 +169,8 @@ export default function PrivateWindow({
           onSubmit={send}
           placeholder="Ask your personal agent..."
           quotePlaceholder="Ask about it (optional)"
-          canSend={draft.trim().length > 0 || reference !== null}
+          canSend={files.uploading === 0 && (draft.trim().length > 0 || reference !== null || files.items.length > 0)}
+          files={files}
           busy={sending}
           dropLabel="Drop to ask your agent about it"
         />
@@ -186,7 +204,7 @@ function PrivateEntry({
 }) {
   if (item.type !== "card") {
     return item.type === "user" ? (
-      <Bubble from="user" mine author={me} text={item.text} onDragState={onDragState} />
+      <Bubble from="user" mine author={me} text={item.text} attachments={item.attachments} onDragState={onDragState} />
     ) : (
       <Bubble from="agent" author="Your agent" text={item.text} onDragState={onDragState} />
     );
@@ -347,7 +365,7 @@ function CheckCard({ card, act, onAsk }: { card: UnderstandingCheckCard; act: Ac
       <p className="pcard-question">{card.question}</p>
       {card.why ? (
         <p className="pcard-why">
-          <span aria-hidden="true">◇ </span>
+          <AgentIcon size={13} className="inline-icon" />{" "}
           {card.why}
         </p>
       ) : null}

@@ -10,6 +10,9 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import type { Attachment } from "../agents/protocol";
+import { api } from "./api";
+import { FileIcon, ModeratorIcon, PlusIcon } from "./icons";
 import { Avatar } from "./ui";
 
 export type Source = "team" | "agent" | "user";
@@ -61,6 +64,7 @@ export function Bubble({
   variant,
   messageId,
   footer,
+  attachments,
   onDragState,
 }: {
   from: Source;
@@ -68,6 +72,7 @@ export function Bubble({
   author: string;
   label?: string;
   text: string;
+  attachments?: Attachment[];
   quote?: Quote;
   forwarded?: boolean;
   variant?: "moderator" | "anonymous" | "failed" | "status";
@@ -109,7 +114,7 @@ export function Bubble({
       {showAuthor ? (
         variant === "moderator" ? (
           <span className="avatar mod-avatar" aria-hidden="true">
-            ◆
+            <ModeratorIcon size={17} />
           </span>
         ) : variant === "anonymous" ? (
           <span className="avatar anon-avatar" aria-hidden="true">
@@ -133,6 +138,7 @@ export function Bubble({
           {label ? <p className="bubble-label">{label}</p> : null}
           {quote ? <QuoteCard author={quote.author} text={quote.text} /> : null}
           {shownText ? <p className="bubble-text">{shownText}</p> : null}
+          {attachments?.length ? <AttachmentList items={attachments} /> : null}
           {footer}
         </div>
       </div>
@@ -245,7 +251,13 @@ export function Composer({
   canSend,
   dropLabel,
   busy = false,
+  files,
+  leading,
 }: {
+  /** Files attached to the message being written (from useAttachments). */
+  files?: Attachments;
+  /** Extra buttons on the left of the input, after "+". */
+  leading?: ReactNode;
   tone: "team" | "agent";
   active: boolean;
   over: boolean;
@@ -274,7 +286,10 @@ export function Composer({
           onClear={onClearQuote}
         />
       ) : null}
+      {files && (files.items.length > 0 || files.uploading > 0 || files.error) ? <PendingFiles files={files} /> : null}
       <div className="composer-row">
+        {files ? <AttachButton files={files} /> : null}
+        {leading}
         <GrowingInput
           value={value}
           onChange={onChange}
@@ -373,4 +388,131 @@ function setDragGhost(event: DragEvent, author: string, text: string, from: Sour
   document.body.appendChild(ghost);
   event.dataTransfer.setDragImage(ghost, 24, 20);
   setTimeout(() => ghost.remove(), 0);
+}
+
+// ---------- attachments ----------
+
+export type Attachments = {
+  items: Attachment[];
+  uploading: number;
+  error: string;
+  add: (files: FileList | File[]) => Promise<void>;
+  remove: (id: string) => void;
+  clear: () => void;
+  set: (items: Attachment[]) => void;
+};
+
+/** Files picked for the message being written; each is uploaded right away. */
+export function useAttachments(): Attachments {
+  const [items, setItems] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const [error, setError] = useState("");
+  async function add(list: FileList | File[]) {
+    const files = Array.from(list).slice(0, 6);
+    setError("");
+    setUploading((n) => n + files.length);
+    await Promise.all(
+      files.map(async (file) => {
+        try {
+          const uploaded = await api.uploadFile(file);
+          setItems((current) => [...current, uploaded].slice(0, 6));
+        } catch (caught) {
+          setError(caught instanceof Error ? caught.message : "Could not upload the file.");
+        } finally {
+          setUploading((n) => n - 1);
+        }
+      }),
+    );
+  }
+  return {
+    items,
+    uploading,
+    error,
+    add,
+    remove: (id) => setItems((current) => current.filter((item) => item.id !== id)),
+    clear: () => {
+      setItems([]);
+      setError("");
+    },
+    set: setItems,
+  };
+}
+
+function AttachButton({ files }: { files: Attachments }) {
+  const input = useRef<HTMLInputElement | null>(null);
+  return (
+    <>
+      <button
+        className="composer-icon-btn"
+        type="button"
+        onClick={() => input.current?.click()}
+        aria-label="Attach a file or photo"
+        title="Attach a file or photo (up to 8 MB)"
+      >
+        <PlusIcon />
+      </button>
+      <input
+        ref={input}
+        type="file"
+        multiple
+        hidden
+        accept="image/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.hwp,.txt,.md,.csv,.zip"
+        onChange={(event) => {
+          if (event.target.files?.length) void files.add(event.target.files);
+          event.target.value = "";
+        }}
+      />
+    </>
+  );
+}
+
+function PendingFiles({ files }: { files: Attachments }) {
+  return (
+    <div className="pending-files">
+      {files.items.map((item) => (
+        <span key={item.id} className="file-chip">
+          {item.type.startsWith("image/") ? (
+            <img src={item.url} alt="" className="file-chip-thumb" />
+          ) : (
+            <FileIcon size={15} />
+          )}
+          <span className="file-chip-name">{item.name}</span>
+          <button type="button" className="file-chip-x" onClick={() => files.remove(item.id)} aria-label={`Remove ${item.name}`}>
+            ×
+          </button>
+        </span>
+      ))}
+      {files.uploading > 0 ? <span className="file-chip uploading">Uploading…</span> : null}
+      {files.error ? <span className="file-error">{files.error}</span> : null}
+    </div>
+  );
+}
+
+function formatSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Files and pictures inside a message. Pictures show as thumbnails; other files as chips. */
+export function AttachmentList({ items }: { items: Attachment[] }) {
+  return (
+    <div className="bubble-files">
+      {items.map((item) =>
+        item.type.startsWith("image/") ? (
+          <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="bubble-image" draggable={false}>
+            <img src={item.url} alt={item.name} loading="lazy" draggable={false} />
+          </a>
+        ) : (
+          <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="bubble-file" draggable={false}>
+            <FileIcon size={18} />
+            <span>
+              <strong>{item.name}</strong>
+              <small>{formatSize(item.size)}</small>
+            </span>
+          </a>
+        ),
+      )}
+    </div>
+  );
 }

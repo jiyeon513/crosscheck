@@ -2660,6 +2660,228 @@ button.schedule-row.past:hover {
   background: var(--ink-3);
 }
 
+/* ---------- No sideways scrolling in chat threads ---------- */
+
+.thread {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* ---------- Moderator messages stand apart from people ---------- */
+
+.mod-avatar {
+  border-radius: 9px;
+  background: linear-gradient(140deg, #0e7490, #155e75);
+  color: white;
+  box-shadow: 0 2px 6px rgba(14, 116, 144, 0.35);
+}
+
+.bubble-row.moderator {
+  max-width: 90%;
+}
+
+.bubble-row.moderator .bubble {
+  border: 1px solid var(--mod-line);
+  border-left: 4px solid var(--mod);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f0fdff 0%, #e6f8fb 100%);
+  box-shadow: 0 2px 8px -4px rgba(14, 116, 144, 0.35);
+}
+
+.bubble-row.moderator .bubble-author {
+  color: var(--mod);
+  font-weight: 800;
+}
+
+.agent-mark {
+  border-radius: 9px;
+  background: linear-gradient(140deg, #7c5ce0, var(--agent));
+}
+
+.inline-icon {
+  vertical-align: -2px;
+}
+
+/* ---------- Composer: + (attach) and Moderator buttons ---------- */
+
+.composer-icon-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-2);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.composer-icon-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.composer-icon-btn.mod {
+  color: var(--mod);
+  border-color: var(--mod-line);
+  background: var(--mod-soft);
+}
+
+.composer-icon-btn.mod.on,
+.composer-icon-btn.mod:hover {
+  background: var(--mod);
+  border-color: var(--mod);
+  color: white;
+}
+
+.mod-menu {
+  position: relative;
+  flex: none;
+}
+
+.mod-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  width: min(380px, 80vw);
+  padding: 10px;
+  border: 1px solid var(--mod-line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: pop 0.15s ease-out;
+}
+
+.mod-popover .chat-tools {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.mod-popover .chat-tools-label {
+  flex-basis: 100%;
+  color: var(--mod);
+}
+
+.mod-popover .host-buttons .btn {
+  background: var(--mod-soft);
+  border-color: var(--mod-line);
+  color: var(--mod);
+}
+
+/* ---------- Attachments ---------- */
+
+.pending-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 6px 4px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.file-chip.uploading {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.file-chip-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.file-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-chip-x {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.file-chip-x:hover {
+  color: var(--danger);
+}
+
+.file-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.bubble-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.bubble-image img {
+  display: block;
+  max-width: 240px;
+  max-height: 200px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  object-fit: cover;
+}
+
+.bubble-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.bubble-file span {
+  display: grid;
+  min-width: 0;
+}
+
+.bubble-file strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.bubble-file small {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.bubble-row.team.mine .bubble-file,
+.bubble-row.user .bubble-file {
+  color: var(--ink);
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 980px) {

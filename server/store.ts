@@ -2,9 +2,10 @@
 // team chat of each group. Stored as one JSON file in DATA_DIR (default ./data), written shortly after
 // each change. Small and dependency-free on purpose; swap for a database if the app grows.
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { ModeratorNote, Quote } from "../agents/protocol";
+import type { Attachment, ModeratorNote, Quote } from "../agents/protocol";
 
 export type User = { name: string; salt: string; hash: string; createdAt: string };
 export type Session = { name: string; createdAt: string };
@@ -43,7 +44,11 @@ export type ChatRecord = {
   anonymous?: boolean;
   quote?: Quote;
   note?: ModeratorNote;
+  attachments?: Attachment[];
 };
+
+/** An uploaded file or picture. The bytes live in <DATA_DIR>/uploads/<id>. */
+export type FileRecord = { id: string; name: string; type: string; size: number; uploadedBy: string; createdAt: string };
 
 type Data = {
   users: Record<string, User>; // key: lower-case name
@@ -53,28 +58,34 @@ type Data = {
   decisions: DecisionRecord[];
   chats: Record<string, ChatRecord[]>; // key: group code
   opened: Record<string, string>; // key: "<lower-case name>|<code>", last time the member opened the group
+  files: Record<string, FileRecord>; // key: file id
 };
 
 const CHAT_LIMIT = 500;
 
 function empty(): Data {
-  return { users: {}, sessions: {}, groups: {}, meetings: [], decisions: [], chats: {}, opened: {} };
+  return { users: {}, sessions: {}, groups: {}, meetings: [], decisions: [], chats: {}, opened: {}, files: {} };
 }
 
 class Store {
   private data: Data = empty();
   private file = "";
   private timer: NodeJS.Timeout | undefined;
+  /** Where uploaded files are kept. */
+  uploadsDir = "";
 
   /** Load from DATA_DIR. With `memory`, nothing is read or written (tests). */
   open(options: { memory?: boolean } = {}) {
     this.data = empty();
     if (options.memory) {
       this.file = "";
+      this.uploadsDir = mkdtempSync(join(tmpdir(), "crosscheck-uploads-"));
       return;
     }
     const dir = resolve(process.env.DATA_DIR || "data");
     mkdirSync(dir, { recursive: true });
+    this.uploadsDir = join(dir, "uploads");
+    mkdirSync(this.uploadsDir, { recursive: true });
     this.file = join(dir, "crosscheck.json");
     try {
       this.data = { ...empty(), ...(JSON.parse(readFileSync(this.file, "utf8")) as Partial<Data>) };

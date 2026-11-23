@@ -30,9 +30,13 @@ export type GroupMessage = {
   anonymous?: boolean;
   /** The message this one replies to. The agents read it as part of the message. */
   quote?: Quote;
+  attachments?: Attachment[];
 };
 
 export type Quote = { author: string; text: string };
+
+/** A file or picture attached to a message. Agents only see its name and kind, never its contents. */
+export type Attachment = { id: string; name: string; type: string; size: number; url: string };
 
 // ---------- private window (one per participant) ----------
 
@@ -80,7 +84,7 @@ export type ConcernCard = {
 export type Card = ShareSuggestionCard | UnderstandingCheckCard | ConcernCard;
 
 export type PrivateItem =
-  | { id: string; at: number; type: "user" | "agent"; text: string }
+  | { id: string; at: number; type: "user" | "agent"; text: string; attachments?: Attachment[] }
   | { id: string; at: number; type: "card"; card: Card };
 
 // ---------- messages between the moderator and the personal agents ----------

@@ -17,6 +17,7 @@ import { DEFAULT_RULES, type Rules } from "./rules";
 import { isUnsure, norm } from "./format";
 import type {
   AgentToModerator,
+  Attachment,
   Card,
   ChatLine,
   Check,
@@ -112,16 +113,21 @@ export class Meeting {
   }
 
   /** A participant posts in the group chat, optionally replying to (quoting) an earlier message. */
-  async postGroupMessage(user: string, text: string, options: { quote?: Quote } = {}): Promise<void> {
+  async postGroupMessage(
+    user: string, text: string, options: { quote?: Quote; attachments?: Attachment[] } = {},
+  ): Promise<void> {
     this.requireUser(user);
-    if (!text.trim()) throw new Error("Empty message");
-    await this.publish(user, text, false, options.quote);
+    if (!text.trim() && !options.attachments?.length) throw new Error("Empty message");
+    await this.publish(user, text, false, options.quote, options.attachments);
   }
 
-  private async publish(user: string, body: string, anonymous: boolean, quote?: Quote): Promise<void> {
+  private async publish(
+    user: string, body: string, anonymous: boolean, quote?: Quote, attachments?: Attachment[],
+  ): Promise<void> {
     const msg = this.addGroup(anonymous ? "Anonymous" : user, "user", body);
     if (anonymous) msg.anonymous = true;
     if (quote?.text?.trim()) msg.quote = { author: quote.author || "Someone", text: quote.text.trim() };
+    if (attachments?.length) msg.attachments = attachments;
     this.log("user_to_group", anonymous ? "anonymous" : `user:${user}`, "group", {});
 
     // While members are answering a check, unprompted suggestion cards only distract; concerns still go through chat.
@@ -133,11 +139,12 @@ export class Meeting {
 
   /** A participant talks to their own agent (Task 1). Only that agent is called. */
   async sendPrivateMessage(user: string, text: string, options: {
-    cardId?: string; groupMessageId?: string; intent?: "invite_brainstorm";
+    cardId?: string; groupMessageId?: string; intent?: "invite_brainstorm"; attachments?: Attachment[];
   } = {}): Promise<void> {
     this.requireUser(user);
     const body = text.trim();
-    if (!body) throw new Error("Empty message");
+    const attachments = options.attachments?.length ? options.attachments : undefined;
+    if (!body && !attachments) throw new Error("Empty message");
     if (options.cardId && options.groupMessageId) throw new Error("Choose one reference");
     const card = options.cardId ? this.findCard(user, options.cardId) : undefined;
     const groupMessage = options.groupMessageId ? this.group.find(m => m.id === options.groupMessageId) : undefined;
@@ -151,14 +158,15 @@ export class Meeting {
       const check = this.checkOpen() ? this.check : null;
       const proposal = check ? { id: check.id, version: check.version, decision: check.decision } : undefined;
       const res = await personal.chat({
-        ...this.ownerContext(user), stage: this.stage, message: body, reference, proposal, intent: options.intent,
+        ...this.ownerContext(user), stage: this.stage, message: (body + describeAttachments(attachments)).trim(),
+        reference, proposal, intent: options.intent,
       }, this.llmLog(`agent:${user}`)).catch((error: unknown) => {
         console.warn(`[CrossCheck] personal agent for ${user} failed:`, error instanceof Error ? error.message : error);
         throw new PersonalAgentUnavailable("Your agent could not answer just now. Please try again.");
       });
       // Keep the exchange even if a new version opened meanwhile; a concern then belongs to the current check.
       const current = this.checkOpen() ? this.check!.id : undefined;
-      this.addPrivate(user, { type: "user", text: body });
+      this.addPrivate(user, { type: "user", text: body, ...(attachments ? { attachments } : {}) });
       this.addPrivate(user, { type: "agent", text: res.reply });
       this.log("user_to_agent", `user:${user}`, `agent:${user}`, {});
       if (res.share_draft) this.addSuggestion(user, "chat", "Draft for the team.", res.share_draft, [], current);
@@ -694,16 +702,18 @@ export class Meeting {
 
   /** The group chat as the agents read it. This is ALL the moderator ever gets, plus labels. */
   private groupContext(): ChatLine[] {
-    return this.group.map(({ id, author, text, kind, quote }) => ({
+    return this.group.map(({ id, author, text, kind, quote, attachments }) => ({
       id, author, kind,
-      text: quote ? `(replying to ${quote.author}: "${clip(quote.text)}") ${text}` : text,
+      text: ((quote ? `(replying to ${quote.author}: "${clip(quote.text)}") ` : "") + text + describeAttachments(attachments)).trim(),
     }));
   }
 
   private privateTurns(user: string): PrivateTurn[] {
     const turns: PrivateTurn[] = [];
     for (const item of this.windows.get(user) ?? []) {
-      if (item.type !== "card") turns.push({ id: item.id, role: item.type, text: item.text });
+      if (item.type !== "card") {
+        turns.push({ id: item.id, role: item.type, text: (item.text + describeAttachments(item.attachments)).trim() });
+      }
     }
     return turns;
   }
@@ -736,7 +746,7 @@ export class Meeting {
     this.log("mod_to_group", "moderator", "group", { text, note });
   }
 
-  private addPrivate(user: string, item: { type: "user" | "agent"; text: string }): void {
+  private addPrivate(user: string, item: { type: "user" | "agent"; text: string; attachments?: Attachment[] }): void {
     this.windows.get(user)!.push({ id: this.nextId("p"), at: this.now(), ...item });
   }
 
@@ -794,6 +804,13 @@ export class Meeting {
       ? { prompt: r.prompt, input: r.user, output: r.raw, mocked: r.mocked, ms: r.ms }
       : { prompt: r.prompt, mocked: r.mocked, ms: r.ms });
   }
+}
+
+/** How agents see attachments: names and kinds only, never the file contents. */
+function describeAttachments(list?: Attachment[]): string {
+  if (!list?.length) return "";
+  const kind = (a: Attachment) => (a.type.startsWith("image/") ? "image" : a.type === "application/pdf" ? "PDF" : "file");
+  return ` [attached: ${list.map((a) => `${a.name} (${kind(a)})`).join(", ")}]`;
 }
 
 function sameText(a: string, b: string): boolean {

@@ -1,5 +1,5 @@
 // Calls to the CrossCheck server (server/index.ts). Every call after login carries the session token.
-import type { UserView } from "../agents/protocol";
+import type { Attachment, UserView } from "../agents/protocol";
 import type { Decision, Group, GroupDetail, GroupSummary, Meeting } from "./model";
 
 export type RoomView = UserView & { meetingId: string; log: Decision[] };
@@ -96,6 +96,22 @@ export const api = {
   joinRoom: (code: string, meetingId: string | null) =>
     request<{ roomKey: string }>("POST", "/api/rooms/join", { code, meetingId }),
   roomView: (roomKey: string) => request<RoomView>("GET", `/api/rooms/${roomKey}/view`),
+  /** Upload a file or picture to attach to a message (up to 8 MB). */
+  async uploadFile(file: File): Promise<Attachment> {
+    const token = getToken();
+    const response = await fetch("/api/uploads", {
+      method: "POST",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "X-File-Name": encodeURIComponent(file.name),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: file,
+    });
+    const data = (await response.json().catch(() => ({}))) as Attachment & { error?: string };
+    if (!response.ok) throw new ApiError(response.status, data.error || "Could not upload the file.");
+    return data;
+  },
   roomAction: (roomKey: string, action: string, body: object) =>
     request<{ ok: true }>("POST", `/api/rooms/${roomKey}/${action}`, body),
 };

@@ -6,8 +6,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import type { GroupMessage } from "../agents/protocol";
 import { api, Logo, type RoomView } from "./api";
-import { Bubble, Composer, People, clearCarried, joinDraft, pasteToDraft, readDrop, type Quote, type Source } from "./chatParts";
-import CurrentLog, { AgreementBox, ModeratorTools } from "./Meetings";
+import {
+  Bubble,
+  Composer,
+  People,
+  clearCarried,
+  joinDraft,
+  pasteToDraft,
+  readDrop,
+  useAttachments,
+  type Quote,
+  type Source,
+} from "./chatParts";
+import { AgentIcon } from "./icons";
+import CurrentLog, { AgreementBox, ModeratorMenu } from "./Meetings";
 import { currentMeeting, formatMeetingTime, type GroupDetail, type Meeting } from "./model";
 import PrivateWindow, { type AgentReference } from "./PrivateWindow";
 import { Avatar } from "./ui";
@@ -23,6 +35,7 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
   const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [teamDraft, setTeamDraft] = useState("");
   const [teamQuote, setTeamQuote] = useState<Quote | null>(null);
+  const teamFiles = useAttachments();
   const [sendingTeam, setSendingTeam] = useState(false);
   const [agentReference, setAgentReference] = useState<AgentReference | null>(null);
   const [exploring, setExploring] = useState<string | null>(null);
@@ -92,16 +105,23 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
     event.preventDefault();
     const text = teamDraft.trim();
     const quote = teamQuote;
-    if ((!text && !quote) || sendingTeam) return;
+    const files = teamFiles.items;
+    if ((!text && !quote && files.length === 0) || sendingTeam || teamFiles.uploading > 0) return;
     setSendingTeam(true);
     setTeamDraft("");
     setTeamQuote(null);
+    teamFiles.clear();
     try {
-      await room.act("group", { text, ...(quote ? { quote } : {}) });
+      await room.act("group", {
+        text,
+        ...(quote ? { quote } : {}),
+        ...(files.length ? { attachments: files.map((file) => file.id) } : {}),
+      });
       setNotice("");
     } catch (caught) {
       setTeamDraft(text);
       setTeamQuote(quote);
+      teamFiles.set(files);
       setNotice(caught instanceof Error ? caught.message : "Could not send that message.");
     } finally {
       setSendingTeam(false);
@@ -300,7 +320,6 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
               )}
               <div ref={teamEnd} />
             </div>
-            <ModeratorTools act={room.act} checking={view?.agreement?.status === "collecting"} />
             <Composer
               tone="team"
               active={dragging !== null && dragging !== "team"}
@@ -311,9 +330,15 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
               onChange={setTeamDraft}
               onSubmit={sendTeam}
               placeholder={view ? `Message the team as ${me}...` : "Connecting..."}
-              canSend={Boolean(view) && (teamDraft.trim().length > 0 || teamQuote !== null)}
+              canSend={
+                Boolean(view) &&
+                teamFiles.uploading === 0 &&
+                (teamDraft.trim().length > 0 || teamQuote !== null || teamFiles.items.length > 0)
+              }
               busy={sendingTeam}
               dropLabel="Drop to reply to it"
+              files={teamFiles}
+              leading={<ModeratorMenu act={room.act} checking={view?.agreement?.status === "collecting"} />}
             />
           </div>
         </section>
@@ -394,7 +419,13 @@ function TeamLine({
   const footer =
     note?.type === "angle_prompt" ? (
       <button className="bubble-action" type="button" onClick={onExplore} disabled={exploring}>
-        {exploring ? "Asking your agent..." : "◇ Think about it privately"}
+        {exploring ? (
+          "Asking your agent..."
+        ) : (
+          <>
+            <AgentIcon size={13} className="inline-icon" /> Think about it privately
+          </>
+        )}
       </button>
     ) : liveCheck ? (
       <AgreementBox agreement={agreement} isHost={isHost} act={act} inline />
@@ -422,6 +453,7 @@ function TeamLine({
       quote={line.quote}
       variant={line.kind === "moderator" ? "moderator" : line.anonymous ? "anonymous" : undefined}
       messageId={line.id}
+      attachments={line.attachments}
       footer={footer}
       onDragState={onDragState}
     />
