@@ -6,8 +6,9 @@
 // agents keep context across meetings, and saves new chat lines and agreed decisions in the store.
 
 import { randomUUID } from "node:crypto";
+import { norm } from "../agents/format";
 import { Meeting, PersonalAgentUnavailable } from "../agents/meeting";
-import type { Quote } from "../agents/protocol";
+import type { MemoryItem, Quote } from "../agents/protocol";
 import { HttpError } from "./auth";
 import { readAttachments } from "./files";
 import { findMeeting, memberGroup } from "./groups";
@@ -24,6 +25,8 @@ type Room = {
   meeting: Meeting;
   savedGroup: number;
   savedDecisions: number;
+  /** Who posted each anonymous message. Kept on the server; only the poster's own view marks it as theirs. */
+  anonymousBy: Map<string, string>;
 };
 
 const rooms = new Map<string, Room>();
@@ -56,6 +59,9 @@ function createRoom(code: string, meetingId: string, host: string): Room {
   (meeting as unknown as { userMsgsAtLastAngleRun: number }).userMsgsAtLastAngleRun = history.filter(
     (line) => line.kind === "user",
   ).length;
+  // Quiet-member counts start from this meeting's own posts too.
+  meeting.markHistoryLoaded();
+  meeting.setMemory(host, memoryFor(host, code));
 
   const room: Room = {
     key: meeting.id,
@@ -65,6 +71,7 @@ function createRoom(code: string, meetingId: string, host: string): Room {
     meeting,
     savedGroup: meeting.group.length,
     savedDecisions: 0,
+    anonymousBy: new Map(),
   };
   rooms.set(room.key, room);
   return room;
@@ -78,7 +85,30 @@ export function joinRoom(name: string, body: Body) {
   const key = `${group.code}.${meetingId}`;
   const room = rooms.get(key) ?? createRoom(group.code, meetingId, name);
   if (!room.meeting.participants.includes(name)) room.meeting.join(name);
+  room.meeting.setMemory(name, memoryFor(name, group.code));
   return { roomKey: key };
+}
+
+// ---------- what each member's agent remembers across the meetings of a group ----------
+
+const MEMORY_LIMIT = 20;
+const memoryKey = (name: string, code: string) => `${name.toLowerCase()}|${code}`;
+
+function memoryFor(name: string, code: string): MemoryItem[] {
+  return store.db.memory[memoryKey(name, code)] ?? [];
+}
+
+function addMemory(room: Room, name: string, note: string): void {
+  const clean = note.replace(/\s+/g, " ").trim().slice(0, 300);
+  if (!clean) throw new HttpError(400, "Write the note to keep");
+  const key = memoryKey(name, room.code);
+  const list = (store.db.memory[key] ??= []);
+  if (!list.some((item) => norm(item.text) === norm(clean))) {
+    list.push({ id: randomUUID().slice(0, 8), text: clean, at: Date.now() });
+    if (list.length > MEMORY_LIMIT) list.splice(0, list.length - MEMORY_LIMIT);
+    store.save();
+  }
+  room.meeting.setMemory(name, list);
 }
 
 /** Group actions return once stored; agent work continues and shows up on the next poll. */
@@ -109,18 +139,25 @@ export async function roomAction(name: string, key: string, action: string, body
   if (!room) throw new HttpError(404, "Room not found. Join again.");
   memberGroup(room.code, name);
   const { meeting } = room;
-  if (!meeting.participants.includes(name)) meeting.join(name);
+  if (!meeting.participants.includes(name)) {
+    meeting.join(name);
+    meeting.setMemory(name, memoryFor(name, room.code));
+  }
 
   switch (action) {
-    case "GET view":
+    case "GET view": {
+      const view = meeting.view(name);
       return {
-        ...meeting.view(name),
+        ...view,
+        // The poster sees their own anonymous posts as theirs; nobody else's view changes.
+        group: view.group.map((message) => (room.anonymousBy.get(message.id) === name ? { ...message, mine: true } : message)),
         meetingId: room.meetingId,
         // This meeting's decision log as saved (with any wording fixes by members).
         log: store.db.decisions.filter(
           (d) => d.groupCode === room.code && d.meetingId === (room.meetingId === "general" ? null : room.meetingId),
         ),
       };
+    }
     case "POST group": {
       const quote = readQuote(body.quote);
       const attachments = readAttachments(name, body.attachments);
@@ -139,9 +176,51 @@ export async function roomAction(name: string, key: string, action: string, body
       return acknowledge;
     }
     case "POST share":
-      return run(room, meeting.shareCard(name, text(body.cardId), text(body.text), shareMode(body.mode)));
-    case "POST concern":
-      return run(room, meeting.raiseConcern(name, text(body.cardId), shareMode(body.mode), text(body.text)));
+    case "POST concern": {
+      const mode = shareMode(body.mode);
+      const before = meeting.group.length;
+      const job =
+        action === "POST share"
+          ? meeting.shareCard(name, text(body.cardId), text(body.text), mode)
+          : meeting.raiseConcern(name, text(body.cardId), mode, text(body.text));
+      // The engine adds the message before its first await, so it is already in the chat here.
+      const posted = meeting.group[before];
+      if (posted?.anonymous) room.anonymousBy.set(posted.id, name);
+      return run(room, job);
+    }
+    case "POST tell":
+      return run(room, meeting.tellModerator(name, text(body.cardId), text(body.text)));
+    case "POST stance": {
+      const stance = text(body.stance);
+      if (stance !== "support" && stance !== "hesitant" && stance !== "unsure") throw new HttpError(400, "Choose support, hesitant or unsure");
+      meeting.shareStance(name, text(body.checkId), stance);
+      return acknowledge;
+    }
+    case "POST pair":
+      if (typeof body.accept !== "boolean") throw new HttpError(400, "Answer yes or no");
+      return run(room, meeting.answerPairing(name, text(body.pairingId), body.accept));
+    case "POST joint":
+      return run(room, meeting.postJoint(name, text(body.cardId), text(body.text)));
+    case "POST poll":
+      return run(room, meeting.requestPoll(name, text(body.question)));
+    case "POST poll/answer":
+      return run(room, meeting.answerPoll(name, text(body.pollId), body.skip === true ? null : text(body.text)));
+    case "POST poll/combine":
+      return run(room, meeting.combinePollNow(name, text(body.pollId)));
+    case "POST memory/save":
+      addMemory(room, name, meeting.saveMemoryCard(name, text(body.cardId)));
+      return acknowledge;
+    case "POST memory/add":
+      addMemory(room, name, text(body.text));
+      return acknowledge;
+    case "POST memory/delete": {
+      const key = memoryKey(name, room.code);
+      const list = (store.db.memory[key] ?? []).filter((item) => item.id !== text(body.id));
+      store.db.memory[key] = list;
+      store.save();
+      meeting.setMemory(name, list);
+      return acknowledge;
+    }
     case "POST dismiss":
       meeting.dismissCard(name, text(body.cardId));
       return acknowledge;

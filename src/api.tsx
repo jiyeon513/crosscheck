@@ -1,8 +1,10 @@
 // Calls to the CrossCheck server (server/index.ts). Every call after login carries the session token.
-import type { Attachment, UserView } from "../agents/protocol";
+import type { Attachment, GroupMessage, UserView } from "../agents/protocol";
 import type { Decision, Group, GroupDetail, GroupSummary, Meeting } from "./model";
 
-export type RoomView = UserView & { meetingId: string; log: Decision[] };
+/** A team message as this person's view has it; `mine` marks their own anonymous posts (only in their view). */
+export type RoomGroupMessage = GroupMessage & { mine?: boolean };
+export type RoomView = Omit<UserView, "group"> & { group: RoomGroupMessage[]; meetingId: string; log: Decision[] };
 
 export class ApiError extends Error {
   constructor(
@@ -48,7 +50,7 @@ export function onSignedOut(callback: () => void) {
   signedOut = callback;
 }
 
-async function request<T>(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<T> {
+async function request<T>(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
   const token = getToken();
   const response = await fetch(path, {
     method,
@@ -88,9 +90,11 @@ export const api = {
   groups: () => request<GroupSummary[]>("GET", "/api/groups"),
   createGroup: (title: string) => request<Group>("POST", "/api/groups", { title }),
   joinGroup: (code: string) => request<Group>("POST", "/api/groups/join", { code }),
+  createDemo: () => request<Group>("POST", "/api/groups/demo", {}),
   group: (code: string) => request<GroupDetail>("GET", `/api/groups/${code}`),
   scheduleMeeting: (code: string, title: string, startsAt: string) =>
     request<Meeting>("POST", `/api/groups/${code}/meetings`, { title, startsAt }),
+  deleteMeeting: (code: string, id: string) => request<{ ok: true }>("DELETE", `/api/groups/${code}/meetings/${id}`),
   editDecision: (code: string, id: string, text: string) =>
     request<Decision>("PATCH", `/api/groups/${code}/decisions/${id}`, { text }),
   joinRoom: (code: string, meetingId: string | null) =>

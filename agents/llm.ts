@@ -44,9 +44,13 @@ export function settings() {
   };
 }
 
-export function llmInfo(): { mode: "mock" | "unconfigured" | "live"; model: string } {
+export function llmInfo(): { mode: "mock" | "unconfigured" | "live"; model: string; moderatorModel: string } {
   const s = settings();
-  return { mode: s.mock ? "mock" : s.apiKey ? "live" : "unconfigured", model: s.mock ? "mock" : personalModel() };
+  return {
+    mode: s.mock ? "mock" : s.apiKey ? "live" : "unconfigured",
+    model: s.mock ? "mock" : personalModel(),
+    moderatorModel: s.mock ? "mock" : s.model,
+  };
 }
 
 // ---------- usage ----------

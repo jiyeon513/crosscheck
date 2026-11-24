@@ -5,7 +5,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { Attachment, ModeratorNote, Quote } from "../agents/protocol";
+import type { Attachment, MemoryItem, ModeratorNote, Quote } from "../agents/protocol";
 
 export type User = { name: string; salt: string; hash: string; createdAt: string };
 export type Session = { name: string; createdAt: string };
@@ -59,12 +59,14 @@ type Data = {
   chats: Record<string, ChatRecord[]>; // key: group code
   opened: Record<string, string>; // key: "<lower-case name>|<code>", last time the member opened the group
   files: Record<string, FileRecord>; // key: file id
+  /** What each member's personal agent remembers in one group. Only that member and their own agent read it. */
+  memory: Record<string, MemoryItem[]>; // key: "<lower-case name>|<code>"
 };
 
 const CHAT_LIMIT = 500;
 
 function empty(): Data {
-  return { users: {}, sessions: {}, groups: {}, meetings: [], decisions: [], chats: {}, opened: {}, files: {} };
+  return { users: {}, sessions: {}, groups: {}, meetings: [], decisions: [], chats: {}, opened: {}, files: {}, memory: {} };
 }
 
 class Store {

@@ -10,6 +10,22 @@ A group chat for student team projects. Each group keeps one ongoing team chat, 
 
 Design direction: [docs/design-direction.md](docs/design-direction.md). Agent design and privacy boundary: [docs/agents-design.md](docs/agents-design.md).
 
+## About this folder
+
+This is the merged CrossCheck app (merged-app_v0.1; the same code is on the `merged-app` branch of `ahdahioui/crosscheck`, in its `app/` folder). It follows `jiyeon513/crosscheck` up to `9da1f86` (the React app and its server, including her later engine work: following a decision through disagreement and revisits, file attachments, the Moderator menu), plus four architecture additions: a back room (Ask everyone privately: each agent pre-fills its member's answer and only the combined result is posted; Tell the Moderator only on concern cards), one meeting state (the board in the decision log: topics, versions with the changed words highlighted, readings found, private questions), agent notes that carry over to the group's next meetings, and facilitation (explore / converge / confirm phase, a private nudge to a member who has stayed quiet), plus stances (each agent reads its member's stance on a proposal; the member chooses to share it without a name, and the board shows the mix once two have) and combining ideas between members (when two agents both have something on the same angle or message, both members are offered, without names, to combine; only if both say yes do they see each other's name and one joint draft they can post together). On top of that it keeps what our own web client (`web/` in `ahdahioui/crosscheck`) had and this app did not:
+
+- invitation links (`?join=CODE`), the Invite button and the room menu (`⋯`): agent status and models, invitation link, export decisions, leave the meeting, log out;
+- the connection badge and the meeting stage bar (Explore & share ideas → Narrow it down → Confirm privately, driven by the server's phase), and the goal at the top of the team chat;
+- Discuss privately / Reply / Propose as decision on every team message, a box to type a proposal in the decision log, and "Forwarded" on a message that only quotes another;
+- a confirmation before a private note or agent reply dropped on the log is posted to the team with your name;
+- your own anonymous posts marked as yours in your own view (the server remembers who posted them; nobody else's view changes);
+- starter prompts and the carried-over note (earlier decisions, next meeting) in the private window, and "From your note" on suggestion cards;
+- the demo group, removing a scheduled meeting that has no decisions, hiding the actions on a Moderator angle prompt, and one panel at a time with tabs on a phone.
+
+`agents/` and `prompts/` are a modified copy of the team's agent code (`naajeehxe/CS40703_Xmas` at `0b60de5`). They stay here until those changes are merged into the team repo; after that, this app should use the team's agent code instead of a copy.
+
+Run every command below from the repository root.
+
 ## Run it locally
 
 Node 20 or newer.

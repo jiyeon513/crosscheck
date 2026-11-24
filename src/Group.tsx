@@ -57,6 +57,21 @@ export default function GroupPage({
     await api.editDecision(code, id, text);
     await load();
   };
+  /** Meetings without decisions can be taken off the schedule (for everyone in the group). */
+  const remove = async (meeting: Meeting) => {
+    if (!window.confirm(`Remove “${meeting.title}” from the schedule for everyone?`)) return;
+    try {
+      await api.deleteMeeting(code, meeting.id);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not remove that meeting.");
+    }
+  };
+  const removeButton = (meeting: Meeting) => (
+    <button className="icon-btn remove-meeting" type="button" onClick={() => void remove(meeting)} aria-label={`Remove ${meeting.title}`} title="Remove from the schedule">
+      ×
+    </button>
+  );
 
   async function schedule(title: string, startsAt: string) {
     await api.scheduleMeeting(code, title, startsAt);
@@ -95,6 +110,7 @@ export default function GroupPage({
       </header>
 
       <section className="page wide">
+        {error ? <p className="error">{error}</p> : null}
         <div className="group-hero card">
           <div className="group-hero-text">
             <span className="group-initial big" aria-hidden="true">
@@ -155,6 +171,7 @@ export default function GroupPage({
                           Join
                         </button>
                       ) : null}
+                      {decisionsOf(meeting).length === 0 ? removeButton(meeting) : null}
                     </li>
                   );
                 })}
@@ -181,6 +198,7 @@ export default function GroupPage({
                         {decisionsOf(meeting).length} decision{decisionsOf(meeting).length === 1 ? "" : "s"} ›
                       </span>
                     </button>
+                    {decisionsOf(meeting).length === 0 ? removeButton(meeting) : null}
                   </li>
                 ))}
               </ul>

@@ -50,6 +50,10 @@ function describe(item: PrivateItem): string {
   const c = item.card;
   if (c.kind === "share_suggestion") return `CARD share suggestion (${c.source}): ${c.nudge}\n        draft: "${c.draft}"`;
   if (c.kind === "concern") return `CARD concern: "${c.label}"\n        draft: "${c.draft}"   [raise with my name] [raise anonymously]`;
+  if (c.kind === "poll") return `CARD private question: ${c.question}\n        draft: "${c.draft}"   [send to the Moderator only] [skip]`;
+  if (c.kind === "memory") return `CARD remember: "${c.text}"   [remember] [no thanks]`;
+  if (c.kind === "pair") return `CARD a teammate also has something on ${c.topic}   [yes, combine] [no thanks]`;
+  if (c.kind === "joint") return `CARD together with ${c.partner}: "${c.draft}"   [post together]`;
   return `CARD agreement check: ${c.question}\n        options: ${c.options.join(" | ")}`;
 }
 

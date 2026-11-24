@@ -122,3 +122,47 @@ export function editDecision(name: string, code: string, id: string, body: Body)
 export function findMeeting(code: string, meetingId: string): MeetingRecord | undefined {
   return store.db.meetings.find((m) => m.groupCode === code && m.id === meetingId);
 }
+
+/** DELETE /api/groups/:code/meetings/:id — remove a scheduled meeting that has no decisions yet. */
+export function removeMeeting(name: string, code: string, meetingId: string) {
+  const group = memberGroup(code, name);
+  const index = store.db.meetings.findIndex((m) => m.groupCode === group.code && m.id === meetingId);
+  if (index === -1) throw new HttpError(404, "That meeting is not on the schedule.");
+  if (store.db.decisions.some((d) => d.groupCode === group.code && d.meetingId === meetingId)) {
+    throw new HttpError(409, "This meeting already has decisions, so it stays on the schedule.");
+  }
+  store.db.meetings.splice(index, 1);
+  store.save();
+  return { ok: true };
+}
+
+/**
+ * POST /api/groups/demo — a sample group to try the app alone: a few earlier team messages from sample
+ * teammates (they are chat history only, not accounts) and two meetings, one in progress and one coming up.
+ */
+export function createDemoGroup(name: string) {
+  const group = createGroup(name, { title: "Demo · Pick one topic for our team project" });
+  const now = Date.now();
+  const lines: [string, string][] = [
+    ["Jun", "Should we lock the screen flow before anyone starts coding?"],
+    ["Alex", "Testers got stuck on the second screen. The back button was hard to find."],
+    ["Jia", "What should we bring to the next project review?"],
+  ];
+  lines.forEach(([author, line], index) =>
+    store.appendChat(group.code, { id: `demo-${index + 1}`, author, kind: "user", text: line, at: now - (lines.length - index) * 60_000 }),
+  );
+  const review = new Date(now + 4 * 24 * 3600_000);
+  review.setHours(14, 0, 0, 0);
+  for (const [title, startsAt] of [["Prototype meeting", new Date(now - 30 * 60_000)], ["Final review", review]] as const) {
+    store.db.meetings.push({
+      id: `mtg_${randomBytes(8).toString("hex")}`,
+      groupCode: group.code,
+      title,
+      startsAt: startsAt.toISOString(),
+      createdBy: name,
+      createdAt: new Date(now).toISOString(),
+    });
+  }
+  store.save();
+  return group;
+}

@@ -27,7 +27,7 @@ When it is a decision, prepare a private check for the members. People often agr
 - "ambiguity": the aspect most likely to be understood differently, in 1 to 4 words (for example scope, deliverable, deadline, owner).
 - "question": one short, neutral question about that one aspect only. Do not combine two topics.
 - "options": 2 or 3 concrete readings a member could have, each 6 words or fewer and clearly different, taken from what was actually said in the chat. Then add "Not sure yet". If the chat says nothing about the ambiguous aspect, use the generic question below instead of inventing readings.
-- Write in the language most of the group chat is written in, not just the newest message's language.
+- Write the decision, question and options in the language most of the group chat is written in (an English chat gets English), not just the newest message's language. The Korean examples above are only examples: they never decide the language.
 - Do not name participants, except when the ambiguity is who owns a task and the chat already named them.
 - If nothing is realistically ambiguous, ask "Is this how you understood the decision?" with the options "Yes, as stated", "I understood it differently", "Not sure yet".
 

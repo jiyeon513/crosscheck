@@ -2,7 +2,7 @@
 // These functions return private UI data and have no capability to post, vote or edit room state.
 import { callPersonalJSON, type LLMRecord } from "./llm";
 import { norm } from "./format";
-import type { AngleReply, Card, ChatLine, ChatResult, CheckSuggestion, GroupMessage, PrivateTurn, ReactResult, Stage } from "./protocol";
+import type { AngleReply, Card, ChatLine, ChatResult, CheckSuggestion, GroupMessage, PollReply, PrivateTurn, ReactResult, Stage, Stance } from "./protocol";
 
 type Log = (record: LLMRecord) => void;
 export type Generate = (prompt: string, context: object, schema: object, log?: Log) => Promise<unknown>;
@@ -12,11 +12,15 @@ type Base = {
   user: string; goal: string; group: ChatLine[]; privateHistory: PrivateTurn[];
   proposal?: { id: string; version: number; decision: string } | null;
   recentSuggestions?: RecentSuggestion[];
+  /** Notes this member saved in earlier meetings of the group. Only their own agent gets them; never evidence. */
+  memory?: string[];
 };
 export type ChatInput = Base & { stage: Stage; message: string; reference?: Card | GroupMessage | null; intent?: "invite_brainstorm" };
 export type ReactInput = Base & { newMessage: ChatLine };
 export type AngleReplyInput = Base & { angle: string; intent?: "find_contribution" | "invite_brainstorm" };
 export type CheckSuggestInput = Base & { decision: string; question: string; options: string[] };
+export type PollReplyInput = Base & { question: string };
+export type QuietNudgeInput = Base & { recent: ChatLine[] };
 
 const string = { type: "string" };
 const nullableString = { type: ["string", "null"] };
@@ -27,12 +31,18 @@ const evidenceSchema = { type: "array", items: record({ id: string, quote: strin
 const chatSchema = record({
   reply: string, share_draft: nullableString,
   concern: { anyOf: [record({ label: string, draft: string }), { type: "null" }] },
+  remember: nullableString,
 });
+const pollSchema = record({ draft: nullableString, why: string });
 const suggestionSchema = record({
   kind: { type: "string", enum: ["none", "grounded", "brainstorm"] },
   nudge: string, draft: string, evidence: evidenceSchema,
 });
-const checkSchema = record({ suggested_option: nullableString, why: string, evidence: evidenceSchema });
+const STANCES: Stance[] = ["support", "hesitant", "unsure"];
+const checkSchema = record({
+  suggested_option: nullableString, why: string, evidence: evidenceSchema,
+  stance: { anyOf: [{ type: "string", enum: STANCES }, { type: "null" }] },
+});
 
 /** The language the owner last wrote in. The model is told to use it, because it often drifts otherwise. */
 export function replyLanguage(input: Base, latest?: string): "Korean" | "English" {
@@ -49,6 +59,7 @@ function context(input: Base, latest?: string) {
     privateHistory: input.privateHistory.map(({ id, role, text }) => ({ id, role, text })),
     proposal: input.proposal ?? null,
     recentSuggestions: input.recentSuggestions?.map(({ nudge, draft, status }) => ({ nudge, draft, status })) ?? [],
+    memory: input.memory ?? [],
   };
 }
 
@@ -110,7 +121,7 @@ function verifyEvidence(raw: unknown, notes: Map<string, string>): Evidence[] | 
 
 function cardContext(reference: ChatInput["reference"]) {
   if (!reference) return null;
-  if ("text" in reference) {
+  if ("author" in reference) {
     const angle = reference.note?.type === "angle_prompt" ? reference.note.angle : undefined;
     return { kind: reference.kind, author: reference.author, text: reference.text, angle };
   }
@@ -121,6 +132,10 @@ function cardContext(reference: ChatInput["reference"]) {
       kind: reference.kind, version: reference.version, decision: reference.decision, question: reference.question, options: reference.options,
       suggested: reference.suggested, why: reference.why, answer: reference.answer,
     };
+    case "poll": return { kind: reference.kind, question: reference.question, draft: reference.draft, answer: reference.answer };
+    case "memory": return { kind: reference.kind, text: reference.text };
+    case "pair": return { kind: reference.kind, topic: reference.topic, status: reference.status };
+    case "joint": return { kind: reference.kind, partner: reference.partner, draft: reference.draft };
   }
 }
 
@@ -152,11 +167,13 @@ export async function chat(input: ChatInput, log?: Log, generate: Generate = cal
     }
     // At most one draft: when the model offers both, the concern is the one that matters to the decision.
     const draft = concern ? null : data.share_draft?.trim() ?? null;
+    // Something to remember is only a suggestion; the member decides. Missing means none.
+    const remember = nonblank(data.remember) ? data.remember.trim().slice(0, 300) : null;
     requireFormat(
-      !containsInternalId(input, [data.reply, draft, concern?.draft, concern?.label].join(" "), input.reference),
+      !containsInternalId(input, [data.reply, draft, concern?.draft, concern?.label, remember].join(" "), input.reference),
       "internal id in text",
     );
-    return { reply: data.reply.trim(), share_draft: draft, concern };
+    return { reply: data.reply.trim(), share_draft: draft, concern, remember };
   });
 }
 
@@ -211,6 +228,26 @@ export async function suggestCheckAnswer(input: CheckSuggestInput, log?: Log, ge
     // An unsupported guess is dropped, not fatal: the member still gets the question.
     const choice = data.suggested_option;
     const supported = nonblank(choice) && input.options.includes(choice) && evidence.length > 0;
-    return { suggested_option: supported ? choice : null, why: data.why.trim(), evidenceIds: supported ? evidence.map(e => e.id) : [] };
+    // The stance is only a suggestion the member sees; an unknown value means none.
+    const stance = STANCES.includes(data.stance as Stance) ? (data.stance as Stance) : null;
+    return { suggested_option: supported ? choice : null, why: data.why.trim(), evidenceIds: supported ? evidence.map(e => e.id) : [], stance };
   });
+}
+
+/** The Moderator asked everyone a question privately. Pre-fill this member's answer from what they said; they send it. */
+export async function pollReply(input: PollReplyInput, log?: Log, generate: Generate = callPersonalJSON): Promise<PollReply> {
+  return withRetry("poll_reply", async () => {
+    const data = await generate("personal/poll_reply", { ...context(input), question: input.question }, pollSchema, log);
+    requireFormat(isObject(data) && nonblank(data.why), "empty why");
+    requireFormat(data.draft === null || nonblank(data.draft), "blank draft");
+    const draft = data.draft === null ? null : data.draft.trim().slice(0, 300);
+    requireFormat(!containsInternalId(input, [draft, data.why].join(" ")), "internal id in text");
+    return { draft, why: data.why.trim() };
+  });
+}
+
+/** The member has not posted while the team talked. Offer a draft only if something they said privately fits now. */
+export async function quietNudge(input: QuietNudgeInput, log?: Log, generate: Generate = callPersonalJSON): Promise<ReactResult & { evidenceIds: string[] }> {
+  const item = await suggest(input, "personal/quiet_nudge", { recentMessages: input.recent.map(({ author, kind, text }) => ({ author, kind, text })) }, false, generate, log);
+  return item ? { suggest: true, ...item } : { suggest: false, nudge: "", draft: "", evidenceIds: [] };
 }

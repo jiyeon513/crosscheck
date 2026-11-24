@@ -64,8 +64,17 @@ export function CreateGroup({ onBack, onCreated }: { onBack: () => void; onCreat
   );
 }
 
-export function JoinGroup({ onBack, onJoined }: { onBack: () => void; onJoined: (code: string) => void }) {
-  const [code, setCode] = useState("");
+export function JoinGroup({
+  onBack,
+  onJoined,
+  initialCode = "",
+}: {
+  onBack: () => void;
+  onJoined: (code: string) => void;
+  /** Filled in from an invitation link. */
+  initialCode?: string;
+}) {
+  const [code, setCode] = useState(initialCode.toUpperCase());
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -118,8 +127,9 @@ export function JoinGroup({ onBack, onJoined }: { onBack: () => void; onJoined: 
 
 export function InviteCode({ code, onBack, onEnter }: { code: string; onBack: () => void; onEnter: () => void }) {
   const [title, setTitle] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"" | "code" | "link">("");
   const shown = code.toUpperCase();
+  const link = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(code)}`;
 
   useEffect(() => {
     api
@@ -128,13 +138,13 @@ export function InviteCode({ code, onBack, onEnter }: { code: string; onBack: ()
       .catch(() => setTitle(""));
   }, [code]);
 
-  async function copy() {
+  async function copy(what: "code" | "link") {
     try {
-      await navigator.clipboard.writeText(shown);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      await navigator.clipboard.writeText(what === "code" ? shown : link);
+      setCopied(what);
+      setTimeout(() => setCopied(""), 1800);
     } catch {
-      setCopied(false);
+      setCopied("");
     }
   }
 
@@ -145,14 +155,21 @@ export function InviteCode({ code, onBack, onEnter }: { code: string; onBack: ()
           ✓
         </span>
         <h1>{title || "Your group"}</h1>
-        <p className="muted">Share this invitation code so your team can join.</p>
+        <p className="muted">Share the invitation link, or the code, so your team can join.</p>
         <div className="invite-code" aria-label={`Invitation code ${shown}`}>
           {shown.split("").map((char, index) => (
             <span key={index}>{char}</span>
           ))}
         </div>
-        <button className="btn secondary block" type="button" onClick={copy}>
-          {copied ? "Copied!" : "Copy code"}
+        <label>
+          Invitation link
+          <input className="invite-link" value={link} readOnly onFocus={(event) => event.target.select()} />
+        </label>
+        <button className="btn secondary block" type="button" onClick={() => void copy("link")}>
+          {copied === "link" ? "Link copied!" : "Copy invitation link"}
+        </button>
+        <button className="btn ghost block" type="button" onClick={() => void copy("code")}>
+          {copied === "code" ? "Copied!" : "Copy code"}
         </button>
         <button className="btn primary block" type="button" onClick={onEnter}>
           Enter group

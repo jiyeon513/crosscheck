@@ -3,9 +3,9 @@
 // Use them to build the UI and to check the flow for free. They say nothing about prompt quality.
 
 import { isUnsure, norm } from "../agents/format";
-import type { CompareInput, DetectDecisionInput, MissingAngleInput } from "../agents/moderator";
+import type { CombinePiecesInput, CombinePollInput, CompareInput, DetectDecisionInput, MissingAngleInput } from "../agents/moderator";
 import type { AngleReplyInput, ChatInput, CheckSuggestInput, ReactInput } from "../agents/personal";
-import type { AngleReply, ChatResult, CheckSuggestion, Comparison, DecisionDetection, MissingAngle, PrivateTurn, ReactResult } from "../agents/protocol";
+import type { AngleReply, ChatLine, ChatResult, CheckSuggestion, Comparison, DecisionDetection, MissingAngle, PollCombination, PrivateTurn, ReactResult } from "../agents/protocol";
 import { useFixtureGenerator } from "../agents/llm";
 
 const userTexts = (turns: PrivateTurn[]) => turns.filter((t) => t.role === "user").map((t) => t.text);
@@ -17,6 +17,19 @@ export function enableFixtureModels() {
       case "moderator/find_missing_angle": return findMissingAngle(context as MissingAngleInput);
       case "moderator/detect_decision": return detectDecision(context as DetectDecisionInput);
       case "moderator/compare_understanding": return compareUnderstanding(context as CompareInput);
+      case "moderator/combine_poll": return combinePoll(context as CombinePollInput);
+      case "moderator/combine_pieces": {
+        const input = context as CombinePiecesInput;
+        return { draft: `${input.pieces[0]} ${input.pieces[1]}`, reason: "mock: both pieces joined" };
+      }
+      case "personal/poll_reply": {
+        const input = context as { privateHistory: PrivateTurn[]; memory?: string[]; question: string };
+        return pollReply([...userTexts(input.privateHistory), ...(input.memory ?? [])]);
+      }
+      case "personal/quiet_nudge": {
+        const input = context as { privateHistory: PrivateTurn[]; recentMessages: ChatLine[] };
+        return quietNudge(input.privateHistory, input.recentMessages);
+      }
       case "personal/chat": return chat(context as ChatInput);
       case "personal/angle_reply":
       case "personal/react": {
@@ -32,7 +45,10 @@ export function enableFixtureModels() {
         const input = context as CheckSuggestInput;
         const out = suggestCheckAnswer(input);
         const note = input.privateHistory.filter(turn => turn.role === "user").at(-1);
-        return { ...out, why: out.why || input.question, evidence: out.suggested_option && note ? [{ id: note.id, quote: note.text }] : [] };
+        const mine = userTexts(input.privateHistory).join(" ");
+        const stance = /worr|too big|too much|not sure|hesitant|unsure/i.test(mine) ? "hesitant"
+          : /i'?d use|\blike\b|love|great|good idea/i.test(mine) ? "support" : null;
+        return { ...out, stance, why: out.why || input.question, evidence: out.suggested_option && note ? [{ id: note.id, quote: note.text }] : [] };
       }
       default: throw new Error("Unregistered test prompt: " + prompt);
     }
@@ -97,12 +113,50 @@ export function compareUnderstanding(input: CompareInput): Comparison {
   };
 }
 
+// ---------- back room ----------
+
+const TIME_RE = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i;
+function firstTime(text: string): string | null {
+  const m = TIME_RE.exec(text);
+  return m && /:\d{2}|am|pm|\b(at|by|after|before)\s+\d/i.test(text) ? `${m[1]}:${m[2] ?? "00"}` : null;
+}
+
+export function combinePoll(input: CombinePollInput): PollCombination {
+  const times = input.answers.map(firstTime).filter((t): t is string => t !== null);
+  const distinct = [...new Set(times)];
+  if (distinct.length === 1) {
+    return { result: `${distinct[0]} works for everyone.`, fits_all: true, follow_up: "", reason: "mock: one time in every answer" };
+  }
+  const earliest = distinct.sort()[0] ?? "the proposed time";
+  return {
+    result: `The closest option is ${earliest}, but it does not work for everyone yet.`,
+    fits_all: false,
+    follow_up: input.lastRound ? "" : `Could you make ${earliest}?`,
+    reason: "mock: different times",
+  };
+}
+
+function pollReply(notes: string[]) {
+  const timed = [...notes].reverse().find((n) => firstTime(n));
+  return timed
+    ? { draft: `Prefer ${firstTime(timed)}.`, why: "You mentioned this time before." }
+    : { draft: null, why: "You have not told me anything about this yet. What would you like to answer?" };
+}
+
+function quietNudge(turns: PrivateTurn[], recent: ChatLine[]) {
+  const recentWords = longWords(recent.map((m) => m.text).join(" "));
+  const note = turns.filter((t) => t.role === "user").find((t) => [...longWords(t.text)].filter((w) => recentWords.has(w)).length >= 2);
+  return note
+    ? { kind: "grounded", nudge: "The team is talking about this now; your note fits here.", draft: note.text, evidence: [{ id: note.id, quote: note.text }] }
+    : { kind: "none", nudge: "", draft: "", evidence: [] };
+}
+
 // ---------- personal ----------
 
 export function chat(input: ChatInput): ChatResult {
   const m = input.message;
   const mine = [...userTexts(input.privateHistory), m].join(" ");
-  const base: ChatResult = { reply: "", share_draft: null, concern: null };
+  const base: ChatResult = { reply: "", share_draft: null, concern: null, remember: null };
 
   if (/what.*(talking|going on|happening|discuss)|summar|catch me up/i.test(m)) {
     const recent = input.group.filter((g) => g.kind !== "moderator").slice(-3);
@@ -126,7 +180,10 @@ export function chat(input: ChatInput): ChatResult {
     return { ...base, reply: "Let's pin it down. Is it the scope, the data, or the timeline that worries you?" };
   }
   if (/keep (it|that|this) in mind|remember|note (it|that|this)/i.test(m)) {
-    return { ...base, reply: "Noted. It stays between us, and I will only draft it for the group if you ask." };
+    // A lasting fact (a schedule, a place) is offered as a note for later meetings; the member decides.
+    const lasting = /\b(every|usually|always|on (mon|tues|wednes|thurs|fri)days?|coming from)\b/i.test(m);
+    return { ...base, reply: "Noted. It stays between us, and I will only draft it for the group if you ask.",
+      remember: lasting ? m.replace(/\s*(please )?(keep (it|that|this) in mind|remember (it|that|this))\.?$/i, "").trim() : null };
   }
   if (/draft|post (it|this)|share (it|this)|how (should|do) i say/i.test(m)) {
     const last = userTexts(input.privateHistory).slice(-1)[0] ?? m;

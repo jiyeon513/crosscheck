@@ -84,6 +84,14 @@ test("accounts, groups, a meeting room with agents, an agreed decision and its l
     const suggestion = cards(taeho).find((c) => c.kind === "share_suggestion")!;
     await act("Taeho", "share", { cardId: suggestion.id, text: "Wi-Fi counts could measure crowding.", mode: "anonymous" });
     await until(() => view("Minsu"), (v) => v.group.some((m: Json) => m.anonymous));
+    // Only Taeho's own view marks the anonymous post as his; the others cannot tell who posted it.
+    const anonymous = (v: Json) => v.group.find((m: Json) => m.anonymous);
+    assert.equal(anonymous(await view("Taeho")).mine, true);
+    for (const name of ["Minsu", "Jiwoo"]) {
+      const other = await view(name);
+      assert.equal(anonymous(other).mine, undefined);
+      assert.equal(anonymous(other).author, "Anonymous");
+    }
 
     // A quoted reply keeps its quote.
     await act("Jiwoo", "group", { text: "Yes!", quote: { author: "Anonymous", text: "Wi-Fi counts could measure crowding." } });

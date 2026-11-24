@@ -3,6 +3,7 @@ import { api, getToken, onSignedOut } from "./api";
 import GroupPage from "./Group";
 import Home from "./Home";
 import Login from "./Login";
+import { cleanCode } from "./model";
 import Room from "./Room";
 import { CreateGroup, InviteCode, JoinGroup } from "./Start";
 
@@ -18,6 +19,12 @@ export default function App() {
   const [me, setMe] = useState<string | null>(null);
   const [checking, setChecking] = useState(Boolean(getToken()));
   const [route, setRoute] = useState<Route>({ screen: "home" });
+  // An invitation link (?join=CODE) opens the join screen with the code filled in, after logging in if needed.
+  const [invited, setInvited] = useState(() => cleanCode(new URLSearchParams(window.location.search).get("join") ?? ""));
+
+  useEffect(() => {
+    if (invited) window.history.replaceState(null, "", window.location.pathname);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     onSignedOut(() => setMe(null));
@@ -44,6 +51,19 @@ export default function App() {
   const home = () => setRoute({ screen: "home" });
   const toGroup = (code: string) => setRoute({ screen: "group", code });
 
+  if (invited && route.screen === "home") {
+    return (
+      <JoinGroup
+        initialCode={invited}
+        onBack={() => setInvited("")}
+        onJoined={(code) => {
+          setInvited("");
+          toGroup(code);
+        }}
+      />
+    );
+  }
+
   switch (route.screen) {
     case "create":
       return <CreateGroup onBack={home} onCreated={(code) => setRoute({ screen: "invite", code })} />;
@@ -61,7 +81,16 @@ export default function App() {
         />
       );
     case "room":
-      return <Room code={route.code} me={me} onBack={() => toGroup(route.code)} />;
+      return (
+        <Room
+          code={route.code}
+          me={me}
+          onBack={() => toGroup(route.code)}
+          onLogout={() => {
+            void api.logOut().then(() => setMe(null));
+          }}
+        />
+      );
     default:
       return (
         <Home

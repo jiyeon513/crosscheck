@@ -7,7 +7,7 @@
 
 import { callJSON, type LLMRecord } from "./llm";
 import { formatChat, formatList, isUnsure, norm, str, strList } from "./format";
-import type { ChatLine, Comparison, DecisionDetection, MissingAngle } from "./protocol";
+import type { ChatLine, Comparison, DecisionDetection, MissingAngle, PieceCombination, PollCombination } from "./protocol";
 
 type Log = (record: LLMRecord) => void;
 
@@ -115,6 +115,51 @@ export async function compareUnderstanding(input: CompareInput, log?: Log): Prom
       : str(data.anonymous_question) || `Quick check before we move on. ${input.question} (${readings.join(" / ")})`,
     reason: str(data.reason),
   };
+}
+
+// ---------- 4. Back room: combine everyone's private answers to one question (called when the answers are in) ----------
+
+export type CombinePollInput = {
+  goal: string;
+  question: string;
+  /** Anonymous, already shuffled. Skipped members are not in the list. */
+  answers: string[];
+  /** True when this is already the follow-up round: then do not ask again. */
+  lastRound: boolean;
+};
+
+export async function combinePoll(input: CombinePollInput, log?: Log): Promise<PollCombination> {
+  const data = await callJSON<PollCombination>(
+    "moderator/combine_poll",
+    {
+      goal: input.goal,
+      question: input.question,
+      answers: formatList(input.answers),
+      lastRound: input.lastRound ? "yes" : "no",
+    },
+    input, log,
+  );
+  const fits = Boolean(data.fits_all);
+  return {
+    result: str(data.result) || (fits ? "There is an option that works for everyone." : "No single option works for everyone yet."),
+    fits_all: fits,
+    // A follow-up is only asked when nothing fits and another round is allowed.
+    follow_up: !fits && !input.lastRound ? str(data.follow_up) : "",
+    reason: str(data.reason),
+  };
+}
+
+// ---------- 5. Two members agreed to combine their ideas: one joint draft (called only after both said yes) ----------
+
+export type CombinePiecesInput = { goal: string; topic: string; pieces: [string, string] };
+
+export async function combinePieces(input: CombinePiecesInput, log?: Log): Promise<PieceCombination> {
+  const data = await callJSON<PieceCombination>(
+    "moderator/combine_pieces",
+    { goal: input.goal, topic: input.topic, pieceA: input.pieces[0], pieceB: input.pieces[1] },
+    input, log,
+  );
+  return { draft: str(data.draft) || input.pieces.join(" "), reason: str(data.reason) };
 }
 
 function validPartition(groups: unknown, n: number): groups is number[][] {

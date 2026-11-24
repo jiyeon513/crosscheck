@@ -45,6 +45,12 @@ A label is a short, neutral phrase, for example "campus crowding" or "Library an
 | Agreement check opens | Each personal agent | Privately checks the current version against the member’s words. A suggested interpretation is advisory. The member chooses an answer and separately decides whether to approve. |
 | All members answered (or 3 minutes passed with 2+ answers) | Moderator | Compares the shuffled, nameless answers. Matching interpretations and unanimous explicit approval on the same version record the decision. Different: "Agreement 2/4" and one anonymous question. |
 | User raises a concern anonymously | Moderator | The server publishes the exact edited text with anonymous attribution. |
+| User presses Tell the Moderator only on a concern | Moderator | The team sees only the concern's short label, never the text or the name. The text joins the open check (or the next one) and is used, in neutral words, when the answers are compared. |
+| Any member asks everyone privately (back room) | Every personal agent, then the Moderator | Each agent pre-fills its own member's answer from what they said (private chat, own posts, saved notes). The member edits and sends it, or skips. The Moderator combines the nameless answers and posts only the result. If nothing fits everyone, it asks one follow-up privately; if something fits, it opens an agreement check on it. |
+| A member has not posted while teammates posted 5 messages | That member's agent | One private nudge, only if something the member said privately fits the current discussion. Nothing is posted about who is quiet. |
+| The agent notices a lasting fact in the private chat | That member's agent | Offers to remember it. Saved only if the member presses Remember; the member can see, add and forget notes. Notes carry over to the group's next meetings and only that member's agent reads them. |
+
+The Moderator keeps one meeting state, the board: each topic with its versions, the open question, the readings found after a split (no names, no counts, own-words answers never verbatim), and the private questions with their results. The phase (explore, converge, confirm) is derived from it and shown in the team chat header.
 
 After a mismatch, members can keep talking privately or publicly. The host can edit the proposal, which opens a new version and clears approvals. This repeats until everyone agrees.
 
@@ -57,7 +63,8 @@ The boundary is enforced by code, not by prompts.
 - The moderator functions receive only the group chat and labels. Private text is never passed in.
 - A personal agent receives only its own user's private chat.
 - Answers are shuffled and sent without names before the moderator compares them.
-- Private content reaches the group only when the user presses Share or Raise.
+- Private content reaches the group only when the user presses Share or Raise. A private answer or a concern told to the Moderator only reaches the Moderator, without a name; the team sees only the combined result or the concern's label.
+- Saved notes are passed only to their owner's agent, and `findPrivacyLeaks()` treats them like private chat.
 - `findPrivacyLeaks()` in `agents/meeting.ts` checks every model call in a meeting. `npm run simulate` runs it at the end.
 
 ## Demo scenario

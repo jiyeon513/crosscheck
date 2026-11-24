@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { ModeratorIcon } from "./icons";
 import type { RoomView } from "./api";
+import { GrowingInput } from "./chatParts";
 import { formatMeetingTime, meetingStatus, type Decision, type Meeting, type MeetingStatus } from "./model";
 
 type Agreement = NonNullable<RoomView["agreement"]>;
 type Discussing = RoomView["discussing"];
+type Board = RoomView["board"];
+type BoardTopic = Board["topics"][number];
+type BoardPoll = Board["polls"][number];
 type Act = (action: string, body: object) => Promise<void>;
 
 export type Zone = {
@@ -34,8 +38,11 @@ export default function CurrentLog({
   discussing,
   isHost,
   act,
+  onPropose,
+  board,
 }: {
   discussing: Discussing;
+  board: Board | null;
   meeting: Meeting | null;
   decisions: Decision[];
   open: boolean;
@@ -50,6 +57,8 @@ export default function CurrentLog({
   agreement: Agreement | null;
   isHost: boolean;
   act: Act;
+  /** Propose a decision typed in the log; the Moderator opens an agreement check on it. */
+  onPropose: (text: string) => Promise<void>;
 }) {
   const [scheduling, setScheduling] = useState(false);
   const status = meeting ? meetingStatus(meeting) : null;
@@ -95,13 +104,15 @@ export default function CurrentLog({
 
       <div className="log-split">
         <section className="log-current">
-          <h3>Current agreement</h3>
-          {agreement && agreement.status !== "cancelled" && agreement.status !== "aligned" ? (
+          <h3>On the table</h3>
+          {board && (board.topics.length > 0 || board.polls.length > 0) ? (
+            <BoardView board={board} agreement={agreement} isHost={isHost} act={act} />
+          ) : agreement && agreement.status !== "cancelled" && agreement.status !== "aligned" ? (
             <AgreementBox agreement={agreement} isHost={isHost} act={act} />
           ) : discussing ? (
             <DiscussionBox discussing={discussing} />
           ) : (
-            <p className="muted small-note">No open check.</p>
+            <p className="muted small-note">Nothing yet. Proposals and private questions appear here.</p>
           )}
         </section>
 
@@ -133,6 +144,7 @@ export default function CurrentLog({
         </section>
       </div>
 
+      <ProposeBox onPropose={onPropose} />
       <button className="past-link" type="button" onClick={onOpenGroup}>
         Schedule & past decision logs ›
       </button>
@@ -141,11 +153,43 @@ export default function CurrentLog({
   );
 }
 
+/** A box to type a proposal straight into the log (dropping a message here does the same). */
+function ProposeBox({ onPropose }: { onPropose: (text: string) => Promise<void> }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const proposal = text.trim();
+    if (!proposal || busy) return;
+    setBusy(true);
+    try {
+      await onPropose(proposal);
+      setText("");
+    } catch {
+      // Keep the text; the room shows why it did not work.
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="composer log-composer" onSubmit={submit}>
+      <div className="composer-row">
+        <GrowingInput value={text} onChange={setText} placeholder="Propose a decision…" label="Propose a decision" />
+        <button className="btn primary small" type="submit" disabled={!text.trim() || busy}>
+          {busy ? "..." : "Propose"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 /** Shortcuts to the Moderator that any member can use. */
 /** Shortcuts to the Moderator that any member can use; shown above the team chat composer. */
 export function ModeratorTools({ act, checking, onDone }: { act: Act; checking: boolean; onDone?: () => void }) {
   const [angle, setAngle] = useState("");
   const [asking, setAsking] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [polling, setPolling] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
 
@@ -157,6 +201,8 @@ export function ModeratorTools({ act, checking, onDone }: { act: Act; checking: 
       setNote(done);
       setAngle("");
       setAsking(false);
+      setQuestion("");
+      setPolling(false);
       onDone?.();
     } catch (caught) {
       setNote(caught instanceof Error ? caught.message : "That did not work.");
@@ -191,10 +237,36 @@ export function ModeratorTools({ act, checking, onDone }: { act: Act; checking: 
             Cancel
           </button>
         </form>
+      ) : polling ? (
+        <form
+          className="angle-form"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            if (question.trim()) void run("poll", { question: question.trim() }, "Asked everyone privately.");
+          }}
+        >
+          <input
+            aria-describedby="poll-audience"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="e.g. What time on Tuesday works for you?"
+            aria-label="Question to ask everyone privately"
+            autoFocus
+          />
+          <button className="btn primary small" type="submit" disabled={busy || !question.trim()}>
+            Ask privately
+          </button>
+          <button className="btn ghost small" type="button" onClick={() => setPolling(false)}>
+            Cancel
+          </button>
+        </form>
       ) : (
         <div className="host-buttons">
           <button className="btn ghost small" type="button" disabled={busy} onClick={() => setAsking(true)}>
             Ask about an angle
+          </button>
+          <button className="btn ghost small" type="button" disabled={busy} onClick={() => setPolling(true)}>
+            Ask everyone privately
           </button>
           {!checking ? (
             <button
@@ -209,6 +281,11 @@ export function ModeratorTools({ act, checking, onDone }: { act: Act; checking: 
         </div>
       )}
       {asking ? <p className="host-note" id="angle-audience">Your question will appear in the team chat.</p> : null}
+      {polling ? (
+        <p className="host-note" id="poll-audience">
+          Each member answers in their own window. Only the combined result is shown, never who said what.
+        </p>
+      ) : null}
       {note ? <p className="host-note">{note}</p> : null}
     </div>
   );
@@ -577,4 +654,165 @@ function defaultWhen() {
   date.setHours(14, 0, 0, 0);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// ---------- the meeting board: everything on the table, as the Moderator tracks it ----------
+
+const TOPIC_LABEL: Record<BoardTopic["status"], string> = {
+  checking: "Checking privately",
+  split: "Read differently",
+  discussing: "Under discussion",
+  agreed: "Agreed",
+  closed: "Closed",
+};
+const VERSION_LABEL: Record<BoardTopic["versions"][number]["status"], string> = {
+  checking: "checking",
+  split: "read differently",
+  agreed: "agreed",
+  replaced: "replaced",
+  cancelled: "closed",
+};
+
+/** Proposals with their versions, the open question, the readings found (never who), and private questions. */
+export function BoardView({ board, agreement, isHost, act }: { board: Board; agreement: Agreement | null; isHost: boolean; act: Act }) {
+  const topics = board.topics.slice().reverse();
+  const polls = board.polls.filter((poll, index, all) => poll.status === "collecting" || index === all.length - 1).reverse();
+  return (
+    <div className="board">
+      {polls.map((poll) => (
+        <PollRow key={poll.id} poll={poll} act={act} />
+      ))}
+      {topics.map((topic) => (
+        <TopicCard key={topic.id} topic={topic}>
+          {topic.status === "checking" && agreement?.status === "collecting" && agreement.decision === topic.statement ? (
+            <AgreementBox agreement={agreement} isHost={isHost} act={act} />
+          ) : null}
+        </TopicCard>
+      ))}
+    </div>
+  );
+}
+
+function TopicCard({ topic, children }: { topic: BoardTopic; children?: ReactNode }) {
+  const latest = topic.versions[topic.versions.length - 1];
+  const earlier = topic.versions.slice(0, -1);
+  const previous = earlier[earlier.length - 1];
+  const readings = [...topic.versions].reverse().find((v) => v.readings?.length)?.readings;
+  return (
+    <article className={`topic ${topic.status}`}>
+      <p className="topic-head">
+        <span className={`topic-chip ${topic.status}`}>{TOPIC_LABEL[topic.status]}</span>
+        {topic.versions.length > 1 ? <span className="topic-version">version {latest.version}</span> : null}
+      </p>
+      <p className="topic-statement">{previous ? <DiffText from={previous.text} to={topic.statement} /> : topic.statement}</p>
+      {earlier.length ? (
+        <ol className="topic-history" aria-label="Earlier versions">
+          {earlier.map((v) => (
+            <li key={v.version}>
+              <s>{v.text}</s> <em>v{v.version} · {VERSION_LABEL[v.status]}</em>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {topic.status === "checking" ? (
+        <p className="topic-meta">
+          {topic.question} <span className="topic-count">{topic.answered}/{topic.askedOf} answered</span>
+        </p>
+      ) : null}
+      {topic.ambiguity && topic.status !== "agreed" ? (
+        <p className="topic-meta">
+          Could be read differently: <strong>{topic.ambiguity}</strong>
+        </p>
+      ) : null}
+      {readings && topic.status !== "agreed" ? <p className="topic-readings">Readings found: {readings.join(" · ")}</p> : null}
+      {topic.stances ? (
+        <p className="topic-meta">
+          Stances so far:{" "}
+          {(["support", "hesitant", "unsure"] as const)
+            .filter((stance) => topic.stances![stance] > 0)
+            .map((stance) => `${topic.stances![stance]} ${stance}`)
+            .join(" · ")}
+        </p>
+      ) : null}
+      {children}
+    </article>
+  );
+}
+
+function PollRow({ poll, act }: { poll: BoardPoll; act: Act }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function combine() {
+    setBusy(true);
+    setError("");
+    try {
+      await act("poll/combine", { pollId: poll.id });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That did not work.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <article className={`topic poll ${poll.status}`}>
+      <p className="topic-head">
+        <span className="topic-chip poll">{poll.round > 1 ? "Follow-up, asked privately" : "Asked privately"}</span>
+      </p>
+      <p className="topic-statement">{poll.question}</p>
+      {poll.status === "collecting" ? (
+        <p className="topic-meta">
+          <span className="topic-count">
+            {poll.answered}/{poll.askedOf} answered
+          </span>
+          {poll.answered > 0 && poll.answered < poll.askedOf ? (
+            <button className="btn ghost small" type="button" disabled={busy} onClick={() => void combine()}>
+              Combine now
+            </button>
+          ) : null}
+        </p>
+      ) : (
+        <p className={poll.fitsAll ? "topic-readings fits" : "topic-readings"}>{poll.result}</p>
+      )}
+      {error ? <p className="error small-note">{error}</p> : null}
+    </article>
+  );
+}
+
+/** The latest wording, with the words that changed since the previous version highlighted. */
+function DiffText({ from, to }: { from: string; to: string }) {
+  const a = from.split(/\s+/);
+  const b = to.split(/\s+/);
+  const clean = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  // Longest common subsequence of words; words of `to` outside it are new.
+  const lcs: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      lcs[i][j] = clean(a[i]) === clean(b[j]) ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const out: { word: string; added: boolean }[] = [];
+  let i = 0;
+  let j = 0;
+  while (j < b.length) {
+    if (i < a.length && clean(a[i]) === clean(b[j])) {
+      out.push({ word: b[j], added: false });
+      i++;
+      j++;
+    } else if (i < a.length && lcs[i + 1][j] >= lcs[i][j + 1]) {
+      i++;
+    } else {
+      out.push({ word: b[j], added: true });
+      j++;
+    }
+  }
+  return (
+    <>
+      {out.map((token, index) => (
+        <span key={index}>
+          {index > 0 ? " " : ""}
+          {token.added ? <mark className="diff-add">{token.word}</mark> : token.word}
+        </span>
+      ))}
+    </>
+  );
 }

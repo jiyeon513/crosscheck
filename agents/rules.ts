@@ -18,6 +18,12 @@ export type Rules = {
   privateContextTurns: number;
   /** A new decision replaces the open check only while fewer than this share of members have answered it. */
   supersedeBelowAnswered: number;
+  /** A member who has not posted while teammates posted this many messages may get a private nudge from their agent. */
+  quietAfterMessages: number;
+  /** A private question is asked again (with the Moderator's follow-up) at most this many rounds in total. */
+  maxPollRounds: number;
+  /** How many notes a member's agent keeps per group. */
+  memoryLimit: number;
 };
 
 export const DEFAULT_RULES: Rules = {
@@ -29,4 +35,7 @@ export const DEFAULT_RULES: Rules = {
   groupContextMessages: 60,
   privateContextTurns: 30,
   supersedeBelowAnswered: 0.5,
+  quietAfterMessages: 5,
+  maxPollRounds: 2,
+  memoryLimit: 20,
 };

@@ -20,6 +20,19 @@ export default function Home({
 }) {
   const [groups, setGroups] = useState<GroupSummary[] | null>(null);
   const [error, setError] = useState("");
+  const [preparing, setPreparing] = useState(false);
+
+  /** A sample group with earlier team messages and two meetings, to try the app alone. */
+  async function openDemo() {
+    setPreparing(true);
+    setError("");
+    try {
+      onOpen((await api.createDemo()).code);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not prepare the demo group.");
+      setPreparing(false);
+    }
+  }
 
   useEffect(() => {
     api
@@ -78,6 +91,9 @@ export default function Home({
           </button>
         </div>
 
+        <button className="btn ghost small demo-link" type="button" onClick={() => void openDemo()} disabled={preparing}>
+          {preparing ? "Preparing the demo…" : "Try a demo group →"}
+        </button>
         <section className="group-section">
           <h2>Your groups</h2>
           {error ? <p className="error">{error}</p> : null}

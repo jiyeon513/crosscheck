@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { llmInfo } from "../agents/llm";
 import { bearer, HttpError, logIn, logOut, requireUser, signUp } from "./auth";
 import { serveFile, uploadFile } from "./files";
-import { createGroup, editDecision, groupDetail, joinGroup, listGroups, scheduleMeeting } from "./groups";
+import { createGroup, editDecision, groupDetail, joinGroup, listGroups, scheduleMeeting, createDemoGroup, removeMeeting } from "./groups";
 import { errorStatus, joinRoom, roomAction, tickRooms } from "./rooms";
 import { store } from "./store";
 
@@ -52,12 +52,15 @@ async function route(method: string, path: string, body: Body, token: string) {
   if (method === "GET" && path === "/api/groups") return listGroups(name);
   if (method === "POST" && path === "/api/groups") return createGroup(name, body);
   if (method === "POST" && path === "/api/groups/join") return joinGroup(name, body);
+  if (method === "POST" && path === "/api/groups/demo") return createDemoGroup(name);
   if (method === "POST" && path === "/api/rooms/join") return joinRoom(name, body);
 
   let match = path.match(/^\/api\/groups\/([\w-]+)$/);
   if (match && method === "GET") return groupDetail(name, match[1]);
   match = path.match(/^\/api\/groups\/([\w-]+)\/meetings$/);
   if (match && method === "POST") return scheduleMeeting(name, match[1], body);
+  match = path.match(/^\/api\/groups\/([\w-]+)\/meetings\/([\w-]+)$/);
+  if (match && method === "DELETE") return removeMeeting(name, match[1], match[2]);
   match = path.match(/^\/api\/groups\/([\w-]+)\/decisions\/([\w-]+)$/);
   if (match && method === "PATCH") return editDecision(name, match[1], match[2], body);
   match = path.match(/^\/api\/rooms\/([\w.-]+)\/(.+)$/);

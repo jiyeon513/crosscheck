@@ -2987,3 +2987,584 @@ button.schedule-row.past:hover {
     padding: 12px 16px;
   }
 }
+
+/* Invitation link field on the invite screen. */
+.invite-link{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+
+/* Your own anonymous post: the label sits on your (green) bubble, so it needs light text. */
+.bubble-row.team.mine .bubble-label {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* The chat threads overflowed by 1px, which shows a horizontal scrollbar on Windows and Linux. */
+.chat-panel .thread {
+  overflow-x: hidden;
+}
+
+/* ---------- Restored from our web client (merged-app branch) ---------- */
+
+/* Room header: connection badge, Invite and the room menu button. */
+.room-header .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.conn {
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+.conn.off {
+  border-color: var(--log-line);
+  background: var(--log-soft);
+  color: var(--log);
+}
+
+/* Meeting stage bar under the header. */
+.journey {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 0;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.journey .stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 550;
+}
+.journey .stage + .stage::before {
+  content: "";
+  width: 26px;
+  height: 1px;
+  margin-right: 8px;
+  background: var(--line-strong);
+}
+.journey .stage-number {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 11px;
+}
+.journey .stage.active {
+  color: var(--brand);
+  font-weight: 700;
+}
+.journey .stage.active .stage-number {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+.journey .stage.complete .stage-number {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* The room goal at the top of the team thread. */
+.room-goal {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+/* Actions under each team message, and on the Moderator's angle prompt. */
+.bubble-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.bubble-actions .bubble-action {
+  margin-top: 0;
+}
+.bubble-action.quiet {
+  border-color: var(--line);
+  color: var(--ink-2);
+  font-size: 11px;
+}
+.bubble-row.team.mine .bubble-action.quiet {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+/* Pop-ups: confirming a private proposal, and the room menu. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(16, 24, 40, 0.45);
+}
+.modal-card {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 22px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+.modal-card h2 {
+  margin: 0 0 6px;
+  font-size: 19px;
+}
+.modal-card textarea,
+.modal-card input {
+  width: 100%;
+  margin-top: 12px;
+}
+.modal-card label {
+  display: block;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+.modal-actions.wrap {
+  flex-wrap: wrap;
+}
+.privacy-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--agent-soft);
+  color: var(--agent);
+  font-size: 12px;
+}
+.agent-status {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+}
+.agent-status div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.agent-status dt {
+  color: var(--ink-2);
+}
+.agent-status dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Private window: carried-over note, starter prompts, the note a suggestion is based on. */
+.carried {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--agent-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.carried p {
+  margin: 3px 0;
+}
+.carried-title {
+  color: var(--agent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.carried-next {
+  color: var(--ink-3);
+}
+.start-prompts {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.start-prompt {
+  padding: 10px 12px;
+  border: 1px solid var(--agent-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--agent);
+  font-weight: 600;
+  text-align: left;
+}
+.start-prompt:hover:not(:disabled) {
+  background: var(--agent-soft);
+}
+.pcard-evidence {
+  margin: 6px 0;
+  padding: 6px 9px;
+  border-left: 3px solid var(--agent-line);
+  background: var(--agent-soft);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.pcard-evidence strong {
+  margin-right: 4px;
+  color: var(--agent);
+}
+
+/* Group page and home. */
+.remove-meeting {
+  margin-left: 6px;
+  color: var(--ink-3);
+}
+.demo-link {
+  margin-top: 14px;
+}
+
+/* Phone: one panel at a time, switched with the tabs under the header. */
+.phone-tabs {
+  display: none;
+}
+@media (max-width: 760px) {
+  .phone-tabs {
+    display: flex;
+    gap: 4px;
+    margin: 8px 12px 0;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .phone-tabs button {
+    flex: 1;
+    padding: 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-2);
+    font-weight: 600;
+  }
+  .phone-tabs button.on {
+    background: var(--brand-soft);
+    color: var(--brand);
+  }
+  .workspace.phone-team .agent-panel,
+  .workspace.phone-team .log-panel,
+  .workspace.phone-agent .team-panel,
+  .workspace.phone-agent .log-panel,
+  .workspace.phone-log .team-panel,
+  .workspace.phone-log .agent-panel {
+    display: none;
+  }
+  .journey {
+    padding: 8px 12px 0;
+    font-size: 11px;
+  }
+  .journey .stage + .stage::before {
+    width: 10px;
+  }
+  .conn,
+  .room-header .me {
+    display: none;
+  }
+}
+
+/* A message box hidden behind a phone tab measures itself as empty; keep it at least one line tall. */
+textarea.growing-input {
+  min-height: 34px;
+}
+
+/* ---------- architecture v2: phase strip, board, back room, agent notes ---------- */
+
+.phase-strip {
+  display: flex;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.phase-strip li {
+  padding: 1px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 650;
+}
+.phase-strip li.on {
+  border-color: var(--mod-line);
+  background: var(--mod-soft);
+  color: var(--mod);
+}
+
+.board {
+  display: grid;
+  gap: 8px;
+}
+.topic {
+  display: grid;
+  gap: 5px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 13px;
+}
+.topic.agreed {
+  border-color: var(--brand-line);
+}
+.topic.split,
+.topic.discussing {
+  border-color: var(--log-line);
+}
+.topic-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.topic-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.topic-chip.checking,
+.topic-chip.poll {
+  background: var(--mod-soft);
+  color: var(--mod);
+}
+.topic-chip.split,
+.topic-chip.discussing {
+  background: var(--log-soft);
+  color: var(--log);
+}
+.topic-chip.agreed {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.topic-version {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.topic-statement {
+  color: var(--ink);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.topic-history {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.topic-history em {
+  font-style: normal;
+  font-size: 11px;
+}
+.topic-meta,
+.topic-readings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.topic-readings {
+  color: var(--log);
+}
+.topic-readings.fits {
+  color: var(--brand);
+  font-weight: 600;
+}
+.topic-count {
+  color: var(--ink-3);
+  font-weight: 650;
+}
+mark.diff-add {
+  padding: 0 2px;
+  border-radius: 4px;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.pcard.poll {
+  border-color: var(--mod-line);
+  border-left-color: var(--mod);
+}
+.pcard.poll .pcard-kicker {
+  color: var(--mod);
+}
+.pcard.memory {
+  border-left-color: var(--agent);
+  background: var(--agent-soft);
+}
+.pcard.answered.poll,
+.pcard.skipped,
+.pcard.saved,
+.pcard.told_moderator {
+  opacity: 0.75;
+  box-shadow: none;
+}
+
+.memory-notes {
+  position: relative;
+}
+.memory-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--agent-line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--agent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.memory-toggle.on {
+  background: var(--agent-soft);
+}
+.memory-count {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--agent-soft);
+  font-size: 11px;
+}
+.memory-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  width: min(320px, 80vw);
+  padding: 12px;
+  border: 1px solid var(--agent-line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+.memory-title {
+  color: var(--agent);
+  font-size: 12px;
+  font-weight: 750;
+}
+.memory-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.memory-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--agent-soft);
+  font-size: 12.5px;
+}
+.memory-add {
+  display: flex;
+  gap: 6px;
+}
+.memory-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+/* ---------- stances and combining ideas ---------- */
+.stance-row {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.stance-title {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+.stance-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.stance-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.stance-chip.on.support {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.stance-chip.on.hesitant {
+  border-color: var(--log-line);
+  background: var(--log-soft);
+  color: var(--log);
+}
+.stance-chip.on.unsure {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.stance-chip .guess {
+  font-size: 10.5px;
+}
+.pcard.pair,
+.pcard.joint {
+  border-color: var(--brand-line);
+  border-left-color: var(--brand);
+}
+.pcard.pair .pcard-kicker,
+.pcard.joint .pcard-kicker {
+  color: var(--brand);
+}
+.pcard.accepted,
+.pcard.declined,
+.pcard.matched,
+.pcard.posted {
+  opacity: 0.8;
+  box-shadow: none;
+}
