@@ -167,6 +167,25 @@ test("Ask immediately posts the same public receipt whether or not a private car
   }
 });
 
+test("Ask shows the question in every member's own window, with a card or a note", async () => {
+  const m = room();
+  await m.sendPrivateMessage("Taeho", "Wi-Fi access counts are public data.");
+  await m.requestAngle("Jiwoo", "How could we use real campus data?", "find_contribution");
+  for (const user of m.participants) {
+    const agentLines = m.view(user).private.filter(i => i.type === "agent").map(i => (i as { text: string }).text);
+    assert.ok(agentLines.some(t => t.includes("How could we use real campus data?")), user);
+    const card = cards(m, user).some(c => c.kind === "share_suggestion" && c.source === "missing_angle");
+    assert.equal(card || agentLines.some(t => /Nothing/.test(t)), true, user);
+  }
+});
+
+test("Check agreement now with nothing to check says so", async () => {
+  const m = room();
+  await m.startCheck("Jiwoo");
+  assert.equal(m.check, null);
+  assert.equal(m.group.at(-1)?.note?.type, "no_proposal");
+});
+
 test("an Ask receipt does not interrupt detection of a team decision", async () => {
   const m = room();
   const deciding = m.postGroupMessage("Minsu", "Let's go with a study app.");

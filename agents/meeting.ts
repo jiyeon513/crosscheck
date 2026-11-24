@@ -411,12 +411,23 @@ export class Meeting {
 
   private async askAboutAngle(angle: string, intent: "find_contribution" | "invite_brainstorm"): Promise<boolean> {
     this.toAgents({ type: "angle_query", angle, intent });
+    // Every member sees the question in their own window, whether or not their agent finds something.
+    for (const p of this.participants) this.addPrivate(p, { type: "agent", text: `The Moderator asked every Personal Agent: “${angle}” Let me check what you’ve told me.` });
     const found = await Promise.all(this.participants.map(async (p) => {
-      if (intent === "find_contribution" && !this.hasOwnerMessages(p)) return false;
-      const shown = await this.offerCurrent(p, "missing_angle", intent === "find_contribution", async context => {
-        const reply = await personal.angleReply({ ...context, angle, intent }, this.llmLog(`agent:${p}`));
-        return reply.has_view ? reply : null;
-      });
+      const shown = intent === "find_contribution" && !this.hasOwnerMessages(p) ? false
+        : await this.offerCurrent(p, "missing_angle", intent === "find_contribution", async context => {
+          const reply = await personal.angleReply({ ...context, angle, intent }, this.llmLog(`agent:${p}`));
+          return reply.has_view ? reply : null;
+        }).catch((error: unknown) => {
+          console.warn(`[CrossCheck] angle reply for ${p} failed:`, error instanceof Error ? error.message : error);
+          return false;
+        });
+      if (!shown) {
+        const open = this.cards(p).some(c => c.kind === "share_suggestion" && c.status === "open");
+        this.addPrivate(p, { type: "agent", text: open
+          ? "Nothing new beyond what I already suggested above. If you have another thought, tell me here."
+          : "Nothing you’ve told me privately fits this yet. If you have a thought, tell me here and I can help you share it." });
+      }
       this.toModerator(p, { type: "angle_reply", hasView: shown, label: shown ? angle : "" });
       return shown;
     }));
@@ -477,6 +488,10 @@ export class Meeting {
       if (!d.is_decision) {
         // Someone questions an agreed decision: ask the team first instead of reopening it.
         if (d.challenged && !open) this.askToRevisit(agreed[d.challenged - 1]);
+        // A member pressed "Check agreement now": say so rather than doing nothing.
+        else if (trigger === "host_request" && !open && !this.pendingDetection) {
+          this.moderatorSays("I could not find a clear proposal to check yet. Say it in one sentence, or drag a message into the Decision log.", { type: "no_proposal" });
+        }
         continue;
       }
       if (this.alreadyAgreed(d.decision)) {
@@ -811,7 +826,7 @@ export class Meeting {
 
 // A receipt can arrive while the Moderator is deciding whether a team message needs a check.
 function isDecisionContext(message: GroupMessage): boolean {
-  return message.note?.type !== "angle_requested";
+  return message.note?.type !== "angle_requested" && message.note?.type !== "no_proposal";
 }
 
 /** How agents see attachments: names and kinds only, never the file contents. */

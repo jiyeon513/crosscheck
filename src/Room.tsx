@@ -389,6 +389,8 @@ const NOTE_LABEL: Record<string, string> = {
   check_opened: "Agreement check",
   check_closed: "Check closed",
   reopen_prompt: "Revisit a decision?",
+  angle_requested: "Asked the agents",
+  no_proposal: "Nothing to check yet",
 };
 
 function TeamLine({

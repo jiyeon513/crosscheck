@@ -12,6 +12,8 @@ export type ChatLine = { id?: string; author: string; text: string; kind?: "user
 export type ModeratorNote =
   | { type: "angle_prompt"; angle: string }
   | { type: "angle_requested" }
+  /** "Check agreement now" found nothing to check. */
+  | { type: "no_proposal" }
   | { type: "check_opened"; version: number }
   | { type: "check_closed" }
   /** The Moderator asks whether to revisit an agreed decision. Members answer with buttons. */
