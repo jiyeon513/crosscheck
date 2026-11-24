@@ -16,7 +16,7 @@ export type Rules = {
   groupContextMessages: number;
   /** How many recent private turns a personal agent reads. */
   privateContextTurns: number;
-  /** A new decision replaces the open check only while fewer than this share of members have answered it. */
+  /** An unrelated new decision replaces the open check only while fewer than this share of members have answered it. */
   supersedeBelowAnswered: number;
 };
 

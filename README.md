@@ -60,7 +60,7 @@ Browser (src/)                    Server (server/)                         Agent
 | A member writes in their private window | Their agent | Replies. It may offer a draft to share or a concern card. |
 | A teammate posts in the team chat | The other members' agents | If the post connects to something the member said before, suggest a reply draft, privately. Paused while a check collects answers; at most one open suggestion per member. |
 | A member asks the team for ideas in ordinary chat | Moderator, then the Personal Agents | The Moderator relays the original question and acknowledges delivery in the team chat. Members with a relevant idea from their own private conversation receive a private card showing the question and their editable draft. |
-| Any new team message | Moderator | Is the team settling on a decision? If yes, everyone gets a private agreement check and the Moderator says so in the chat. A new decision replaces an open check that fewer than half have answered. |
+| Any new team message | Moderator | Is the team settling on a decision? If yes, everyone gets a private agreement check and the Moderator says so in the chat. An explicit amendment to the open proposal starts a fresh vote for everyone. A different decision can replace it while fewer than half have answered. |
 | Team chat quiet for 60 s while brainstorming | Moderator, then the agents | The Moderator names a missing angle. Agents whose member has a related thought suggest sharing it. If nobody has one, the Moderator asks the team. Any member can also ask about an angle directly, or ask the Moderator to check agreement now. |
 | Everyone answered | Moderator | Compares answers without names. Same reading from everyone: "Agreed n/n" and it goes into the decision log. Otherwise: "Agreement k/n", one anonymous question, and what to do next. The next decision stated in the chat opens a new version; the host can also revise it or close the check. |
 
@@ -85,7 +85,7 @@ The engine started as a copy of `naajeehxe/CS40703_Xmas` at `0b60de5` (also the 
 
 - `agents/personal.ts`: a reply with both a concern and a draft keeps the concern instead of failing (the cause of the 503s and lost messages); invalid output is retried once and the reason logged; an unsupported "agent's guess" is dropped instead of failing the card.
 - `agents/meeting.ts`:
-  - Detection also runs while a check is open, and a new decision replaces a check that fewer than half have answered (`rules.supersedeBelowAnswered`).
+  - Detection also runs while a check is open, and an adopted change to that proposal opens a new version with zero answers and approvals. For unrelated new decisions, replacement is limited to checks that fewer than half have answered (`rules.supersedeBelowAnswered`).
   - A mismatch closes the check with a next-step message. Agreement goes back to the idea stage, so the silence prompt works again.
   - A decision already agreed is not checked again.
   - Revisions and member proposals get a real question with several readings.

@@ -76,6 +76,8 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
   return {
     is_decision: ok,
     invitation_quote: !ok && input.trigger === "new_message" && !input.openProposal ? groundedInvitation : "",
+    revision_quote: ok && input.openProposal && input.trigger === "new_message" && typeof data.revision_quote === "string"
+      ? data.revision_quote.trim() : "",
     decision: ok ? str(data.decision) : "",
     ambiguity: str(data.ambiguity),
     question: ok ? str(data.question) || "Is this how you understood the decision?" : "",
