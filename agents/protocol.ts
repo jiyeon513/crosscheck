@@ -11,6 +11,7 @@ export type ChatLine = { id?: string; author: string; text: string; kind?: "user
 /** Extra structured info on a moderator message, so the UI can render it without parsing text. */
 export type ModeratorNote =
   | { type: "angle_prompt"; angle: string }
+  | { type: "angle_requested" }
   | { type: "check_opened"; version: number }
   | { type: "check_closed" }
   /** The Moderator asks whether to revisit an agreed decision. Members answer with buttons. */

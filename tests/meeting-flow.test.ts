@@ -146,6 +146,36 @@ test("any member, not only the host, can ask about an angle or ask for an agreem
   assert.equal(m.check?.status, "collecting");
 });
 
+test("Ask immediately posts the same public receipt whether or not a private card is offered", async () => {
+  const question = "How could we use real campus data?";
+  for (const hasIdea of [false, true]) {
+    const m = room();
+    if (hasIdea) await m.sendPrivateMessage("Taeho", "Wi-Fi access counts are public data.");
+    const asking = m.requestAngle("Jiwoo", question, "find_contribution");
+    assert.equal(m.group.length, 1);
+    await asking;
+
+    for (const user of m.participants) {
+      const publicLines = m.view(user).group.map(({ id, at, ...message }) => message);
+      assert.deepEqual(publicLines, [{
+        author: "Moderator", kind: "moderator", text: `I asked everyone’s Personal Agent about “${question}”`,
+        note: { type: "angle_requested" },
+      }]);
+      const offered = cards(m, user).some(c => c.kind === "share_suggestion" && c.source === "missing_angle");
+      assert.equal(offered, hasIdea && user === "Taeho");
+    }
+  }
+});
+
+test("an Ask receipt does not interrupt detection of a team decision", async () => {
+  const m = room();
+  const deciding = m.postGroupMessage("Minsu", "Let's go with a study app.");
+  await m.requestAngle("Jiwoo", "Who can test it?", "find_contribution");
+  await deciding;
+  assert.equal(m.check?.status, "collecting");
+  assert.match(m.check!.decision, /study app/);
+});
+
 test("the personal agent is told to answer in the language the member wrote in", async () => {
   const seen: unknown[] = [];
   const capture: personal.Generate = async (_prompt, context) => {

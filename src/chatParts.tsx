@@ -276,7 +276,7 @@ export function Composer({
 }) {
   const className = ["composer", `${tone}-composer`, active ? "active" : "", over ? "over" : ""].join(" ");
   return (
-    <form className={className} onSubmit={onSubmit} {...zone}>
+    <div className={className} {...zone}>
       {quote ? (
         <QuoteCard
           author={quote.author}
@@ -290,20 +290,22 @@ export function Composer({
       <div className="composer-row">
         {files ? <AttachButton files={files} /> : null}
         {leading}
-        <GrowingInput
-          value={value}
-          onChange={onChange}
-          placeholder={quote ? quotePlaceholder : placeholder}
-          label={placeholder}
-        />
-        <button className="btn primary small" type="submit" disabled={!canSend || busy}>
-          {busy ? "..." : "Send"}
-        </button>
+        <form className="composer-message" onSubmit={onSubmit}>
+          <GrowingInput
+            value={value}
+            onChange={onChange}
+            placeholder={quote ? quotePlaceholder : placeholder}
+            label={placeholder}
+          />
+          <button className="btn primary small" type="submit" disabled={!canSend || busy}>
+            {busy ? "..." : "Send"}
+          </button>
+        </form>
       </div>
       <div className="drop-overlay" aria-hidden="true">
         <span>{dropLabel}</span>
       </div>
-    </form>
+    </div>
   );
 }
 
