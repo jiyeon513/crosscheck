@@ -14,6 +14,7 @@ import { llmInfo, type LLMRecord } from "./llm";
 import * as moderator from "./moderator";
 import * as personal from "./personal";
 import { DEFAULT_RULES, type Rules } from "./rules";
+import { AgentsTable, type TableHost } from "./table";
 import { isUnsure, norm } from "./format";
 import { TEAM_QUESTION_NOTICE } from "./protocol";
 import type {
@@ -64,6 +65,8 @@ export class Meeting {
   check: Check | null = null;
   decisions: DecisionRecord[] = [];
   trace: TraceEvent[] = [];
+  /** After a split check, the Moderator talks it over with the agents under code names (agents/table.ts). */
+  readonly table = new AgentsTable(() => this.tableHost());
 
   private windows = new Map<string, PrivateItem[]>();
   private typing = new Map<string, number>();
@@ -312,6 +315,7 @@ export class Meeting {
   /** Call every few seconds. Handles the rules that depend on time. */
   async tick(): Promise<void> {
     const t = this.now();
+    await this.table.tick(t);
     const check = this.check;
     if (check?.status === "collecting" && t - check.createdAt >= this.rules.checkTimeoutMs && Object.keys(check.answers).length >= 2) {
       await this.runCompare();
@@ -359,6 +363,7 @@ export class Meeting {
         : null,
       decisions: this.decisions,
       discussing: this.discussing ? { ...this.discussing } : null,
+      table: this.table.view(user),
       llm: llmInfo(),
     };
   }
@@ -568,6 +573,7 @@ export class Meeting {
       createdAt: this.now(),
       ...(replaces ? { replaces } : {}),
     };
+    this.table.closeOpen();
     this.check = check;
     this.discussing = null;
     this.lastCompared = "";
@@ -613,6 +619,7 @@ export class Meeting {
         (this.comparison?.check === check && this.comparison.inputs === inputs)) return;
     const job = { check, inputs };
     this.comparison = job;
+    let split = false;
     try {
       const labels = shuffle(Object.values(check.answers));
       const res = await moderator.compareUnderstanding(
@@ -664,10 +671,12 @@ export class Meeting {
           "Keep talking here. When the team settles on a version, say it in the chat and I will check it again. The host can also revise the proposal.",
         ].filter(Boolean).join(" ");
         this.moderatorSays(message, { type: "agreement_count", agreed: check.agreed, total });
+        split = true;
       }
     } finally {
       if (this.comparison === job) this.comparison = undefined;
     }
+    if (split) this.table.offer(check);
   }
 
   // =====================================================================
@@ -803,6 +812,32 @@ export class Meeting {
     return this.cards(user).find((c): c is UnderstandingCheckCard => c.kind === "understanding_check" && c.checkId === checkId);
   }
 
+  // ---------- hooks for the agents' table ----------
+
+  private tableHost(): TableHost {
+    return {
+      goal: this.goal,
+      participants: () => this.participants,
+      now: () => this.now(),
+      nextId: (prefix) => this.nextId(prefix),
+      ownerContext: (user) => this.ownerContext(user),
+      privateNotes: (user) => this.privateTurns(user).flatMap((t) => (t.role === "user" && t.id ? [{ id: t.id, text: t.text }] : [])),
+      publicTexts: () => this.group.map((m) => m.text),
+      say: (text) => {
+        const line = this.addGroup("Moderator", "moderator", text);
+        this.log("mod_to_group", "moderator", "group", { text });
+        return line.id;
+      },
+      checkOpen: () => this.checkOpen(),
+      openBridgeCheck: (thread) => this.openCheck({
+        decision: thread.bridge!, question: "Does this wording work for you?",
+        options: ["Yes, this works for me", "It does not work for me", "Not sure yet"],
+      }, thread.replaces),
+      log: (type, from, to, data) => this.log(type, from, to, data),
+      llmLog: (who) => this.llmLog(who),
+    };
+  }
+
   // ---------- trace ----------
 
   private log(type: TraceEvent["type"], from: string, to: string, data: Record<string, unknown>): void {
@@ -861,7 +896,8 @@ function shuffle<T>(items: T[]): T[] {
  */
 export function findPrivacyLeaks(meeting: Meeting): string[] {
   const leaks: string[] = [];
-  const groupTexts = meeting.group.map((m) => m.text);
+  // Texts a member approved for the agents' table are shared on purpose.
+  const groupTexts = [...meeting.group.map((m) => m.text), ...meeting.table.approvedTexts()];
   for (const user of meeting.participants) {
     const secrets = meeting
       .privateUserTexts(user)

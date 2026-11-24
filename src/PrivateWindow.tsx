@@ -9,6 +9,7 @@ import type {
   UnderstandingCheckCard,
 } from "../agents/protocol";
 import type { RoomView } from "./api";
+import { TableDrafts } from "./AgentsTable";
 import { isUnsure } from "./model";
 import type { Attachment } from "../agents/protocol";
 import { Bubble, Composer, Typing, joinDraft, pasteToDraft, useAttachments, type Source, type Zone } from "./chatParts";
@@ -131,6 +132,7 @@ export default function PrivateWindow({
               onDragState={onDragState}
             />
           ))}
+          <TableDrafts table={view?.table ?? []} act={act} />
           {local.map((item) =>
             item.type === "user" ? (
               <Bubble

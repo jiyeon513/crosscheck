@@ -7,12 +7,14 @@ import type { CompareInput, DetectDecisionInput, MissingAngleInput } from "../ag
 import type { AngleReplyInput, ChatInput, CheckSuggestInput, ReactInput } from "../agents/personal";
 import type { AngleReply, ChatResult, CheckSuggestion, Comparison, DecisionDetection, MissingAngle, PrivateTurn, ReactResult } from "../agents/protocol";
 import { useFixtureGenerator } from "../agents/llm";
+import { tableFixture } from "./table-mocks";
 
 const userTexts = (turns: PrivateTurn[]) => turns.filter((t) => t.role === "user").map((t) => t.text);
 
 // These fixtures exercise the same response validation as live calls.
 export function enableFixtureModels() {
   useFixtureGenerator((prompt, context) => {
+    if (prompt === "personal/table_turn" || prompt === "moderator/propose_bridge") return tableFixture(prompt, context);
     switch (prompt) {
       case "moderator/find_missing_angle": return findMissingAngle(context as MissingAngleInput);
       case "moderator/detect_decision": return detectDecision(context as DetectDecisionInput);

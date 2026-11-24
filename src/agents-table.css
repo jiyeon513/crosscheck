@@ -1,0 +1,211 @@
+/* The agents' table (src/AgentsTable.tsx). Kept apart from index.css. */
+
+.agents-table {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--mod-line);
+  border-left: 3px solid var(--mod);
+  border-radius: 12px;
+  background: var(--mod-soft);
+  font-size: 13px;
+  animation: pop 0.18s ease-out;
+}
+.agents-table.bridged {
+  border-color: var(--brand-line);
+  border-left-color: var(--brand);
+  background: var(--brand-soft);
+}
+.at-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  color: var(--mod);
+}
+.at-head strong {
+  color: var(--ink);
+}
+.at-status {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.at-status.talking::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--mod);
+  animation: at-pulse 1.2s ease-in-out infinite;
+}
+@keyframes at-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.at-yours {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--agent-soft);
+  color: var(--agent);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.at-toggle,
+.at-close {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--mod);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.at-toggle + .at-close {
+  margin-left: 0;
+}
+.at-close {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ink-3);
+}
+.at-note {
+  margin: 0;
+  color: var(--ink-2);
+}
+.at-actions {
+  display: flex;
+  gap: 8px;
+}
+.at-bridge {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+}
+.at-messages {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.at-line {
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.at-line.agent {
+  margin-left: 14px;
+  border-color: var(--agent-line);
+}
+.at-line.mine {
+  background: var(--agent-soft);
+}
+.at-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 0 0 2px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.at-from {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.at-line.mod .at-from {
+  color: var(--mod);
+}
+.at-line.agent .at-from {
+  color: var(--agent);
+}
+.at-approved {
+  color: var(--brand);
+}
+.at-text,
+.at-wording,
+.at-extra {
+  margin: 0;
+}
+.at-wording {
+  font-weight: 600;
+  color: var(--ink);
+}
+.at-extra {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.act-chip {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 11px;
+}
+.act-chip.accept {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.act-chip.counter,
+.act-chip.justify {
+  border-color: var(--log-line);
+  background: var(--log-soft);
+  color: var(--log);
+}
+.act-chip.reject {
+  border-color: #f3c2bd;
+  background: #fdf0ee;
+  color: var(--danger);
+}
+.act-chip.propose,
+.act-chip.ask {
+  border-color: var(--mod-line);
+  background: var(--mod-soft);
+  color: var(--mod);
+}
+
+/* Private window */
+.at-drafts {
+  display: grid;
+  gap: 8px;
+}
+.at-said {
+  max-width: 94%;
+  padding: 7px 10px;
+  border: 1px dashed var(--agent-line);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.at-said summary {
+  cursor: pointer;
+  color: var(--agent);
+}
+.at-said ul {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+.at-said em {
+  color: var(--ink-3);
+}
+.pcard.speak {
+  border-color: var(--mod-line);
+  border-left-color: var(--mod);
+}
+.pcard.speak .pcard-kicker {
+  color: var(--mod);
+}

@@ -24,6 +24,7 @@ import { currentMeeting, formatMeetingTime, type GroupDetail, type Meeting } fro
 import PrivateWindow, { type AgentReference } from "./PrivateWindow";
 import { Avatar } from "./ui";
 import { useRoom } from "./useRoom";
+import { TableBelowChat } from "./AgentsTable";
 
 type Target = "team" | "agent" | "log";
 
@@ -318,6 +319,7 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
                   ),
                 )
               )}
+              <TableBelowChat table={view?.table ?? []} act={room.act} />
               <div ref={teamEnd} />
             </div>
             <Composer
