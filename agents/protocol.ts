@@ -111,6 +111,8 @@ export type MissingAngle = { action: "none" | "ask_angle"; angle: string; group_
 export type DecisionDetection = {
   /** The exact clause in the new public message asking teammates to contribute ideas. */
   invitation_quote?: string;
+  /** Words in the newest post adopting a concrete change to the open proposal. */
+  revision_quote?: string;
   is_decision: boolean;
   decision: string;
   ambiguity: string;

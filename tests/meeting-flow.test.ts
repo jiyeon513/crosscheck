@@ -32,7 +32,7 @@ test("a new decision replaces an open check that nobody has answered yet", async
   assert.match(m.group.at(-1)!.text, /^Replacing the earlier check\. Agreement check \(version 2\)/);
 });
 
-test("an open check that most members answered is not replaced", async () => {
+test("an unrelated decision does not replace a check that most members answered", async () => {
   const m = room();
   await m.postGroupMessage("Minsu", "Let's go with a study app.");
   const check = m.check!;
@@ -40,6 +40,57 @@ test("an open check that most members answered is not replaced", async () => {
   await m.answerCheck("Jiwoo", check.id, "Yes, as stated", true);
   await m.postGroupMessage("Taeho", "Let's go with crowding prediction instead.");
   assert.equal(m.check, check);
+});
+
+test("a public amendment after two approvals requires three fresh approvals of the revised wording", async () => {
+  const m = room();
+  const original = "Publish the visitor guide";
+  const revision = "in print only";
+  const full = original + " " + revision;
+  await m.proposeDecision("Minsu", original);
+  const first = m.check!;
+  for (const user of ["Minsu", "Jiwoo"]) await m.answerCheck(user, first.id, "Yes", true);
+  assert.equal(m.view("Taeho").agreement?.approvedCount, 2);
+
+  useFixtureGenerator((prompt) => prompt === "moderator/detect_decision"
+    ? { is_decision: true, decision: full, revision_quote: revision, options: ["Yes", "No"] }
+    : { suggested_option: null, why: "Please choose your reading.", evidence: [] });
+  try {
+    // A quote from someone else's post, even if the model cites it, cannot authorize a revision.
+    await m.postGroupMessage("Taeho", "What do you mean?", { quote: { author: "Minsu", text: revision } });
+    assert.equal(m.check, first);
+    await m.postGroupMessage("Minsu", "Let's publish it in print only.");
+    assert.equal(first.status, "cancelled");
+    const next = m.check!;
+    assert.equal(next.version, 2);
+    assert.notEqual(next.id, first.id);
+    assert.equal(next.decision, full);
+    await m.postGroupMessage("Minsu", "Yes, in print only.");
+    assert.equal(m.check, next);
+  } finally {
+    enableFixtureModels();
+  }
+
+  const next = m.check!;
+  await assert.rejects(m.answerCheck("Taeho", first.id, "Yes", true), /closed/);
+  for (const user of m.participants) {
+    assert.equal(cards(m, user).find(c => c.checkId === first.id)?.status, "closed");
+    const fresh = openCheckCard(m, user);
+    assert.ok(fresh?.kind === "understanding_check");
+    assert.equal(fresh.checkId, next.id);
+    assert.equal(fresh.answer, undefined);
+    assert.equal(fresh.approved, undefined);
+  }
+  for (const [count, user] of m.participants.entries()) {
+    const view = m.view(user);
+    assert.equal(view.agreement?.answered, count);
+    assert.equal(view.agreement.approvedCount, count);
+    assert.equal(view.decisions.length, 0);
+    await m.answerCheck(user, next.id, "Yes", true);
+  }
+  assert.equal(next.status, "aligned");
+  assert.equal(m.view("Taeho").agreement?.approvedCount, 3);
+  assert.deepEqual(m.decisions.map(r => [r.checkId, r.version, r.statement]), [[next.id, 2, full]]);
 });
 
 test("a mismatch closes the check, explains the next step, and the next decision opens a new version", async () => {

@@ -467,7 +467,7 @@ export class Meeting {
       if (post && !open && this.check === previous) await this.runReactions(post.message, post.sender);
       throw error;
     }
-    if (this.check !== previous) return;
+    if (this.check !== previous || (open && open.status !== "collecting")) return;
 
     if (!d.is_decision && !d.challenged) {
       if (!post || open) return;
@@ -487,6 +487,15 @@ export class Meeting {
     if (this.group.slice(historyLength).some(isDecisionContext)) return;
     if (!d.is_decision) {
       if (d.challenged && !open) this.askToRevisit(agreed[d.challenged - 1]);
+      return;
+    }
+    if (open && d.revision_quote) {
+      // The model also sees quoted replies. Only the author's own words may adopt an edit.
+      if (!post?.message.text.includes(d.revision_quote)) return;
+      // One extra qualifier can change the proposal even when the new text contains the old text.
+      const wording = norm(d.decision);
+      if (wording === norm(open.decision) || agreed.some(record => norm(record.statement) === wording)) return;
+      await this.openCheck(d, open.replaces);
       return;
     }
     if (this.alreadyAgreed(d.decision)) {

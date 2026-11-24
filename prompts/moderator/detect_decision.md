@@ -16,6 +16,13 @@ These are NOT decisions:
 - Ideas, questions, reactions, status updates, small talk, breaks, or plans to look something up.
 - Re-confirming a decision that is already in "Already agreed in this meeting", or the proposal that is already being checked ("Open check").
 
+While an "Open check" is collecting answers, first ask what the speaker is doing:
+- REPORTING their understanding of the current words, asking what they mean, or expressing a preference: return is_decision=false and revision_quote="". Even when their interpretation is very specific, it is still their own answer. Do not turn an individual answer into a new team proposal.
+- ADOPTING a change to the team's wording, scope, owner, or other term: return is_decision=true and quote the speaker's exact words that direct the team to make that change in revision_quote. Include the action as well as the change. In decision, apply it to the full open proposal, keeping the other wording intact. Omit the lead-in and rationale. Only the speaker's own new words can authorize the change.
+- SETTLING a separate decision: classify that decision normally and leave revision_quote empty. Also leave revision_quote empty whenever there is no open check.
+
+For example, the open proposal is "We will publish a guide for visitors". "Did we mean printed copies?", "I meant a printed guide", and "A printed guide would work for me" all keep the original check. "OK, let's specify a printed guide" opens a revised check for "We will publish a printed guide for visitors". The distinction is whether the speaker asks the team to adopt a term, even if everyone has been discussing that term already.
+
 For a new public message, fill "invitation_quote" only if the speaker explicitly asks teammates to supply ideas, observations or alternatives that the speaker has left open. Copy the clause making that request verbatim from the speaker's own new words. Use the empty string by default. An invitation must be explicit: a suggestion, a preference or an account of a problem might naturally spark discussion but does not ask anyone to contribute. Read the whole turn first. A speaker who states a need and immediately pitches their own solution is offering an idea. A statement of need ("we need ideas", "we need a plan") is never the requested quote, even when it mentions ideas. Asking whether a particular solution sounds good is feedback on a pitch. Relay only if you can point to a separate direct request for other people's contributions. For a written question, copy the full question including its final question mark when present. A factual question, a request for clarification, an availability poll, and a call for agreement also leave this field empty. Ignore questions appearing only in earlier or quoted messages. Leave it empty for decisions, challenges to agreed decisions, open agreement checks and host requests. Apply these distinctions in the language of the conversation.
 
 Examples in an unrelated meeting:
@@ -32,7 +39,7 @@ A decision "Under discussion" is one the team is talking about again (their answ
 When the newest message questions, disagrees with or wants to change one of the decisions in "Already agreed in this meeting" without itself settling a new version ("Actually, I'm not sure the cafeteria works", "Can we rethink the deadline?"), set "challenged" to that decision's number and "is_decision" to false. Otherwise "challenged" is 0.
 
 When it is a decision, prepare a private check for the members. People often agree to the same words while picturing different things, so find where that could happen here.
-- "decision": one neutral sentence that restates what was decided, in the team's own words. Add nothing that was not said.
+- "decision": one neutral sentence that restates what was decided, in the team's own words. If the team gives an exact sentence to submit, use that sentence verbatim. Add nothing that was not said.
 - "ambiguity": the aspect most likely to be understood differently, in 1 to 4 words (for example scope, deliverable, deadline, owner).
 - "question": one short, neutral question about that one aspect only. Do not combine two topics.
 - "options": 2 or 3 concrete readings a member could have, each 6 words or fewer and clearly different, taken from what was actually said in the chat. Then add "Not sure yet". If the chat says nothing about the ambiguous aspect, use the generic question below instead of inventing readings.
@@ -44,6 +51,7 @@ Reply with one JSON object and nothing else:
 {
   "is_decision": true or false,
   "invitation_quote": "",
+  "revision_quote": "",
   "decision": "",
   "ambiguity": "",
   "question": "",
@@ -51,7 +59,7 @@ Reply with one JSON object and nothing else:
   "challenged": 0,
   "reason": "one short sentence for the developers"
 }
-When "is_decision" is false, leave decision, ambiguity, question and options empty.
+When "is_decision" is false, leave decision, ambiguity, question and options empty. Before returning a revision, verify that revision_quote communicates a choice on behalf of the team. If it merely tells others what the speaker personally thought the proposal meant, return is_decision=false and clear revision_quote.
 
 === INPUT ===
 Meeting goal: {{goal}}

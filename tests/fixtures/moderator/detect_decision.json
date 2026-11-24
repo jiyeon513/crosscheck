@@ -158,5 +158,65 @@
       ]
     },
     "expect": { "is_decision": false }
+  },
+  {
+    "id": "open_check_amendment",
+    "fn": "moderator.detectDecision",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan our review process",
+      "trigger": "new_message",
+      "openProposal": "Send the draft to the reviewers by Friday.",
+      "group": [
+        {"author": "Ari", "text": "Let's send the draft to the reviewers by Friday."},
+        {"author": "Jo", "text": "Let’s set the draft deadline to Thursday so we have time to proofread."}
+      ]
+    },
+    "expect": {"is_decision": true, "revision_quote": {"includes_all": ["Thursday"]}, "decision": {"includes_all": ["draft", "Thursday", "reviewers"], "not_includes_any": ["Friday"]}}
+  },
+  {
+    "id": "open_check_clarification",
+    "fn": "moderator.detectDecision",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan our review process",
+      "trigger": "new_message",
+      "openProposal": "Send the draft to the reviewers by Friday.",
+      "group": [
+        {"author": "Ari", "text": "Let's send the draft to the reviewers by Friday."},
+        {"author": "Jo", "text": "Does Friday mean this week or next week?"}
+      ]
+    },
+    "expect": {"is_decision": false, "revision_quote": ""}
+  },
+  {
+    "id": "open_check_personal_reading",
+    "fn": "moderator.detectDecision",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan our review process",
+      "trigger": "new_message",
+      "openProposal": "Send the draft to the reviewers by Friday.",
+      "group": [
+        {"author": "Ari", "text": "Let's send the draft to the reviewers by Friday."},
+        {"author": "Jo", "text": "I was picturing this Friday."}
+      ]
+    },
+    "expect": {"is_decision": false, "revision_quote": ""}
+  },
+  {
+    "id": "open_check_repeat",
+    "fn": "moderator.detectDecision",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan our review process",
+      "trigger": "new_message",
+      "openProposal": "Send the draft to the reviewers by Friday.",
+      "group": [
+        {"author": "Ari", "text": "Let's send the draft to the reviewers by Friday."},
+        {"author": "Jo", "text": "Yes, sending the draft to the reviewers by Friday sounds good to me."}
+      ]
+    },
+    "expect": {"is_decision": false, "revision_quote": ""}
   }
 ]
