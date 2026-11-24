@@ -300,8 +300,10 @@ export class Meeting {
   /** Any member: ask every personal agent, privately, about an angle the team has not covered. */
   async requestAngle(user: string, angle: string, intent: "find_contribution" | "invite_brainstorm"): Promise<void> {
     this.requireUser(user);
-    if (!angle.trim()) throw new Error("An angle is required");
-    await this.askAboutAngle(angle.trim(), intent).catch(() => { throw new PersonalAgentUnavailable("Unable to complete the private angle checks. Please retry."); });
+    const question = angle.trim();
+    if (!question) throw new Error("An angle is required");
+    this.moderatorSays(`I asked everyone’s Personal Agent about “${question}”`, { type: "angle_requested" });
+    await this.askAboutAngle(question, intent).catch(() => { throw new PersonalAgentUnavailable("Unable to complete the private angle checks. Please retry."); });
   }
 
   /** Host only: stop waiting and compare the answers so far. */
@@ -461,7 +463,8 @@ export class Meeting {
       this.pendingDetection = undefined;
       const previous = this.check;
       const open = this.checkOpen() ? this.check : null;
-      const group = this.groupContext();
+      const historyLength = this.group.length;
+      const group = this.groupContext(this.group.filter(isDecisionContext));
       const agreed = this.agreedRecords();
       const d = await moderator.detectDecision(
         {
@@ -470,7 +473,7 @@ export class Meeting {
         },
         this.llmLog("moderator"),
       );
-      if (this.check !== previous || this.group.length !== group.length) continue;
+      if (this.check !== previous || this.group.slice(historyLength).some(isDecisionContext)) continue;
       if (!d.is_decision) {
         // Someone questions an agreed decision: ask the team first instead of reopening it.
         if (d.challenged && !open) this.askToRevisit(agreed[d.challenged - 1]);
@@ -701,8 +704,8 @@ export class Meeting {
   }
 
   /** The group chat as the agents read it. This is ALL the moderator ever gets, plus labels. */
-  private groupContext(): ChatLine[] {
-    return this.group.map(({ id, author, text, kind, quote, attachments }) => ({
+  private groupContext(messages = this.group): ChatLine[] {
+    return messages.map(({ id, author, text, kind, quote, attachments }) => ({
       id, author, kind,
       text: ((quote ? `(replying to ${quote.author}: "${clip(quote.text)}") ` : "") + text + describeAttachments(attachments)).trim(),
     }));
@@ -804,6 +807,11 @@ export class Meeting {
       ? { prompt: r.prompt, input: r.user, output: r.raw, mocked: r.mocked, ms: r.ms }
       : { prompt: r.prompt, mocked: r.mocked, ms: r.ms });
   }
+}
+
+// A receipt can arrive while the Moderator is deciding whether a team message needs a check.
+function isDecisionContext(message: GroupMessage): boolean {
+  return message.note?.type !== "angle_requested";
 }
 
 /** How agents see attachments: names and kinds only, never the file contents. */

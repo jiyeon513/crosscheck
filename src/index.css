@@ -2238,6 +2238,14 @@ button.schedule-row.past:hover {
   align-items: flex-end;
 }
 
+.composer-message {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: inherit;
+  gap: inherit;
+}
+
 .growing-input {
   flex: 1;
   min-width: 0;

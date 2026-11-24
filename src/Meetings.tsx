@@ -177,6 +177,7 @@ export function ModeratorTools({ act, checking, onDone }: { act: Act; checking: 
           }}
         >
           <input
+            aria-describedby="angle-audience"
             value={angle}
             onChange={(event) => setAngle(event.target.value)}
             placeholder="An angle nobody raised, e.g. real campus data"
@@ -207,6 +208,7 @@ export function ModeratorTools({ act, checking, onDone }: { act: Act; checking: 
           ) : null}
         </div>
       )}
+      {asking ? <p className="host-note" id="angle-audience">Your question will appear in the team chat.</p> : null}
       {note ? <p className="host-note">{note}</p> : null}
     </div>
   );
