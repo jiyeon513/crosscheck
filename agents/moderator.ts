@@ -35,7 +35,7 @@ export async function findMissingAngle(input: MissingAngleInput, log?: Log): Pro
   };
 }
 
-// ---------- 2. Is the team settling on a decision? (called on each new group message) ----------
+// ---------- 2. Does this post settle a decision or invite contributions from the team? ----------
 
 export type DetectDecisionInput = {
   goal: string;
@@ -64,11 +64,18 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
     },
     input, log,
   );
+  const invitation = typeof data.invitation_quote === "string" ? data.invitation_quote.trim() : "";
+  // If the post contains a written question, the cited clause must include the question itself.
+  // This keeps a declarative lead-in from turning a member's own pitch into a team invitation.
+  const questionMark = /[?？؟]/u;
+  const groundedInvitation = invitation && newest?.text.includes(invitation) &&
+    (!questionMark.test(newest.text) || questionMark.test(invitation)) ? invitation : "";
   const options = strList(data.options).slice(0, 4);
   const ok = Boolean(data.is_decision) && str(data.decision).length > 0;
   if (ok && !options.some(isUnsure)) options.push("Not sure yet");
   return {
     is_decision: ok,
+    invitation_quote: !ok && input.trigger === "new_message" && !input.openProposal ? groundedInvitation : "",
     decision: ok ? str(data.decision) : "",
     ambiguity: str(data.ambiguity),
     question: ok ? str(data.question) || "Is this how you understood the decision?" : "",

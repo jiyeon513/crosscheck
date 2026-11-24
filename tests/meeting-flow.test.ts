@@ -146,6 +146,71 @@ test("any member, not only the host, can ask about an angle or ask for an agreem
   assert.equal(m.check?.status, "collecting");
 });
 
+test("a team invitation relays its original message privately, once per relevant idea", async () => {
+  const m = room();
+  const idea = "Wi-Fi access counts are public data.";
+  await m.sendPrivateMessage("Taeho", idea);
+  await m.sendPrivateMessage("Jiwoo", "I like drawing logos.");
+  const question = "What other campus data could we use?";
+  // Another teammate can keep typing while the Moderator classifies the question.
+  await Promise.all([
+    m.postGroupMessage("Minsu", question),
+    m.postGroupMessage("Jiwoo", "Give me a second to think."),
+  ]);
+  const relay = m.trace.filter(e => e.type === "mod_to_agents" && e.data.type === "angle_query");
+  assert.deepEqual(relay.map(e => e.data), [{ type: "angle_query", angle: question, intent: "find_contribution" }]);
+  assert.equal(m.trace.some(e => e.type === "agent_to_mod" && e.data.type === "angle_reply"), false);
+  const suggestions = cards(m, "Taeho").filter(c => c.kind === "share_suggestion" && c.source === "group_question");
+  assert.equal(suggestions.length, 1);
+  const card = suggestions[0];
+  assert.ok(card.kind === "share_suggestion");
+  assert.deepEqual(card.relayedQuestion, { author: "Minsu", text: question });
+  const evidence = m.view("Taeho").private.find(item => item.type === "user" && item.text === idea);
+  assert.deepEqual(card.evidenceIds, [evidence!.id]);
+  assert.deepEqual(m.group.filter(line => line.kind === "user").map(line => line.text), [question, "Give me a second to think."]);
+  const receipts = m.group.filter(line => line.kind === "moderator").map(({ id, at, ...line }) => line);
+  assert.deepEqual(receipts, [{ author: "Moderator", kind: "moderator", note: { type: "angle_requested" },
+    text: "I passed this question to everyone’s Personal Agent.", quote: { author: "Minsu", text: question } }]);
+  for (const user of ["Minsu", "Jiwoo"]) {
+    assert.equal(cards(m, user).some(c => c.kind === "share_suggestion" && c.source === "group_question"), false);
+    assert.ok(!JSON.stringify(m.view(user)).includes(idea));
+  }
+  await m.postGroupMessage("Minsu", question);
+  assert.equal(cards(m, "Taeho").filter(c => c.kind === "share_suggestion" && c.source === "group_question").length, 1);
+});
+
+test("a lead-in to a pitch and a question appearing only in a quoted reply cannot trigger a relay", async () => {
+  const m = room();
+  let citation = "We need an idea.";
+  useFixtureGenerator(() => ({ is_decision: false, invitation_quote: citation }));
+  try {
+    await m.postGroupMessage("Minsu", "We need an idea. What about a night at the gallery?");
+    citation = "Where else should we look?";
+    await m.postGroupMessage("Minsu", "I will think about it.", {
+      quote: { author: "Jiwoo", text: citation },
+    });
+    assert.equal(m.trace.some(e => e.data.type === "angle_query"), false);
+  } finally {
+    enableFixtureModels();
+  }
+});
+
+test("the team sees a delivery receipt even when nobody has relevant private notes; open checks take precedence", async () => {
+  const m = room();
+  const question = "What other campus data could we use?";
+  await m.postGroupMessage("Jiwoo", question);
+  assert.equal(m.group.length, 2);
+  const { id, at, ...receipt } = m.group[1];
+  assert.deepEqual(receipt, { author: "Moderator", kind: "moderator", note: { type: "angle_requested" },
+    text: "I passed this question to everyone’s Personal Agent.", quote: { author: "Jiwoo", text: question } });
+  assert.ok(m.participants.every(user => cards(m, user).length === 0));
+  assert.equal(m.trace.filter(e => e.data.type === "angle_query").length, 1);
+  assert.equal(m.trace.filter(e => e.data.prompt === "personal/react").length, 0);
+  await m.proposeDecision("Minsu", "Start with the campus library.");
+  await m.postGroupMessage("Jiwoo", question);
+  assert.equal(m.trace.filter(e => e.data.type === "angle_query").length, 1);
+});
+
 test("Ask immediately posts the same public receipt whether or not a private card is offered", async () => {
   const question = "How could we use real campus data?";
   for (const hasIdea of [false, true]) {

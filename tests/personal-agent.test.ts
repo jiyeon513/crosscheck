@@ -65,6 +65,18 @@ test("Moderator recall requires evidence; brainstorming can start from an empty 
   assert.equal(idea.label, input.angle);
 });
 
+test("a background relay requires an idea from the member’s own private conversation", async () => {
+  const note = { id: "msg_14", author: "Min", kind: "user" as const, text: "Both entrances look equally busy." };
+  const input = { ...base, group: [note], angle: "What other measurements would help?", requirePrivateIdea: true };
+  const publicOnly = { ...grounded, evidence: [{ id: note.id, quote: note.text }] };
+  const noPrivateTurns = await personal.angleReply({ ...input, privateHistory: [] }, undefined, async () => {
+    throw new Error("No model is needed without a private idea to recall");
+  });
+  assert.equal(noPrivateTurns.has_view, false);
+  assert.equal((await personal.angleReply(input, undefined, returns(publicOnly))).has_view, false);
+  assert.equal((await personal.angleReply(input, undefined, returns(grounded))).has_view, true);
+});
+
 test("an open card is optional context to chat; historical turns are not truncated", async () => {
   const longGroup = Array.from({ length: 80 }, (_, i) => ({ id: "msg_" + i, author: "Bo", text: "Turn " + i }));
   const card = { id: "card_7", kind: "share_suggestion", source: "react", nudge: grounded.nudge, draft: grounded.draft, status: "open" } as const;

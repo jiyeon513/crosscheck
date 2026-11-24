@@ -246,6 +246,7 @@ function useCardAction(act: Act) {
 }
 
 const SOURCE_LABEL: Record<ShareSuggestionCard["source"], string> = {
+  group_question: "Team question relayed by the Moderator",
   react: "Connects to what was just said",
   missing_angle: "An angle the team has not covered",
   chat: "Draft for the team",
@@ -258,6 +259,7 @@ function ShareCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; 
   return (
     <article className={`pcard share ${card.status}`}>
       <p className="pcard-kicker">{SOURCE_LABEL[card.source]}</p>
+      {card.relayedQuestion && <blockquote className="pcard-decision">{card.relayedQuestion.author} · {card.relayedQuestion.text}</blockquote>}
       <p className="pcard-nudge">{card.nudge}</p>
       {open ? (
         <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Draft to share" />

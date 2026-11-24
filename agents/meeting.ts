@@ -3,8 +3,8 @@
 // The prompts decide WHAT an agent says. This file decides WHEN an agent is called, WHO receives the
 // result, and WHAT crosses the privacy boundary. Those three things are never left to a prompt.
 //
-//   group message ──► personal agents of the others: "does this connect to my user's notes?"   (ideation)
-//                 └─► moderator: "is the team settling on a decision?"  ──► agreement check
+//   group message ──► moderator: a decision opens a check; a request for ideas is relayed privately;
+//                     other discussion can trigger personal suggestions tied to the new post.
 //   silence 60 s  ──► moderator: "is an angle missing?" ──► every personal agent ──► private nudge  (ideation)
 //   private message ► that user's personal agent only
 //   all answers in ─► moderator compares anonymous labels ──► "Agreed n/n" or one anonymous question
@@ -75,8 +75,6 @@ export class Meeting {
   private discussing: Discussion | null = null;
   /** Agreed decisions the team chose to keep when asked, and the group length at that moment. */
   private kept = new Map<string, number>();
-  private detection?: Promise<void>;
-  private pendingDetection?: "new_message" | "host_request";
   private comparison?: { check: Check; inputs: string };
   private lastCompared = "";
   private seq = 0;
@@ -130,11 +128,7 @@ export class Meeting {
     if (attachments?.length) msg.attachments = attachments;
     this.log("user_to_group", anonymous ? "anonymous" : `user:${user}`, "group", {});
 
-    // While members are answering a check, unprompted suggestion cards only distract; concerns still go through chat.
-    const jobs = this.checkOpen() ? [] : [this.runReactions(msg, user)];
-    // Detection also runs while a check is open, so a real decision can replace a false alarm.
-    jobs.push(this.runDetect("new_message"));
-    await Promise.all(jobs);
+    await this.runDetect("new_message", { message: msg, sender: user });
   }
 
   /** A participant talks to their own agent (Task 1). Only that agent is called. */
@@ -169,7 +163,7 @@ export class Meeting {
       this.addPrivate(user, { type: "user", text: body, ...(attachments ? { attachments } : {}) });
       this.addPrivate(user, { type: "agent", text: res.reply });
       this.log("user_to_agent", `user:${user}`, `agent:${user}`, {});
-      if (res.share_draft) this.addSuggestion(user, "chat", "Draft for the team.", res.share_draft, [], current);
+      if (res.share_draft) this.addSuggestion(user, "chat", "Draft for the team.", res.share_draft, [], { checkId: current });
       if (res.concern) this.addCard(user, { kind: "concern", id: this.nextId("card"), label: res.concern.label,
         draft: res.concern.draft, status: "open", checkId: current });
     });
@@ -409,29 +403,32 @@ export class Meeting {
     }
   }
 
-  private async askAboutAngle(angle: string, intent: "find_contribution" | "invite_brainstorm"): Promise<boolean> {
+  private async askAboutAngle(angle: string, intent: "find_contribution" | "invite_brainstorm", relayedPost?: GroupMessage): Promise<boolean> {
     this.toAgents({ type: "angle_query", angle, intent });
     const found = await Promise.all(this.participants.map(async (p) => {
       if (intent === "find_contribution" && !this.hasOwnerMessages(p)) return false;
-      const shown = await this.offerCurrent(p, "missing_angle", intent === "find_contribution", async context => {
-        const reply = await personal.angleReply({ ...context, angle, intent }, this.llmLog(`agent:${p}`));
+      const shown = await this.offerCurrent(p, relayedPost ? "group_question" : "missing_angle", intent === "find_contribution", async context => {
+        const reply = await personal.angleReply({ ...context, angle, intent, requirePrivateIdea: Boolean(relayedPost) }, this.llmLog(`agent:${p}`));
         return reply.has_view ? reply : null;
-      });
-      this.toModerator(p, { type: "angle_reply", hasView: shown, label: shown ? angle : "" });
+      }, relayedPost);
+      // An automatic relay needs no report about which members received private cards.
+      if (!relayedPost) this.toModerator(p, { type: "angle_reply", hasView: shown, label: shown ? angle : "" });
       return shown;
     }));
     return found.some(Boolean);
   }
 
-  private async offerCurrent(user: string, source: "react" | "missing_angle", evidenceRequired: boolean,
+  private async offerCurrent(user: string, source: Exclude<ShareSuggestionCard["source"], "chat">, evidenceRequired: boolean,
     decide: (context: ReturnType<Meeting["ownerContext"]>) => Promise<{
       nudge: string; draft: string; evidenceIds: string[];
-    } | null>): Promise<boolean> {
+    } | null>, relayedPost?: GroupMessage): Promise<boolean> {
+    const initialCheck = this.check;
     const initial = this.ownerContext(user);
     const eligible = new Set([
       ...initial.privateHistory.filter(m => m.role === "user").map(m => m.id),
       ...initial.group.filter(m => m.kind === "user" && m.author === user).map(m => m.id),
     ]);
+    if (relayedPost) eligible.delete(relayedPost.id); // Asking the question is not evidence of an answer.
     let context = initial;
     // Recheck a positive result once if the room moved on during inference. Use the newer
     // public discussion for novelty, but keep the owner's evidence anchored to the original event.
@@ -439,61 +436,68 @@ export class Meeting {
       const result = await decide(context);
       if (!result || (evidenceRequired && !result.evidenceIds.length) ||
           result.evidenceIds.some(id => !eligible.has(id))) return false;
+      if (source === "group_question" && (this.stage !== "ideation" || this.check !== initialCheck)) return false;
       if (source === "react" && !this.cooledDown(user)) return false;
       if (this.group.length === context.group.length) {
-        return this.addSuggestion(user, source, result.nudge, result.draft, result.evidenceIds);
+        return this.addSuggestion(user, source, result.nudge, result.draft, result.evidenceIds, {
+          relayedQuestion: relayedPost && { author: relayedPost.author, text: relayedPost.text },
+        });
       }
       context = { ...this.ownerContext(user), privateHistory: initial.privateHistory };
     }
     return false;
   }
 
-  /** Any stage: is the newest group message a decision? If yes, open an agreement check. */
-  private async runDetect(trigger: "new_message" | "host_request"): Promise<void> {
-    if (!this.pendingDetection || trigger === "host_request") this.pendingDetection = trigger;
-    if (!this.detection) {
-      this.detection = this.detectLatest().finally(() => { this.detection = undefined; });
+  /** Classify each post once so a team question is not also handled as an ordinary reaction. */
+  private async runDetect(trigger: "new_message" | "host_request", post?: { message: GroupMessage; sender: string }): Promise<void> {
+    const previous = this.check;
+    const open = this.checkOpen() ? this.check : null;
+    const historyLength = this.group.length;
+    const group = this.groupContext(this.group.filter(isDecisionContext));
+    const agreed = this.agreedRecords();
+    let d: DecisionDetection;
+    try {
+      d = await moderator.detectDecision({
+        goal: this.goal, group, trigger, openProposal: open?.decision ?? null,
+        agreed: agreed.map(record => record.statement), underDiscussion: this.discussing?.decision ?? null,
+      }, this.llmLog("moderator"));
+    } catch (error) {
+      // Personal Agents can still react to ordinary discussion if the Moderator is unavailable.
+      if (post && !open && this.check === previous) await this.runReactions(post.message, post.sender);
+      throw error;
     }
-    await this.detection;
-  }
+    if (this.check !== previous) return;
 
-  private async detectLatest(): Promise<void> {
-    while (this.pendingDetection) {
-      const trigger = this.pendingDetection;
-      this.pendingDetection = undefined;
-      const previous = this.check;
-      const open = this.checkOpen() ? this.check : null;
-      const historyLength = this.group.length;
-      const group = this.groupContext(this.group.filter(isDecisionContext));
-      const agreed = this.agreedRecords();
-      const d = await moderator.detectDecision(
-        {
-          goal: this.goal, group, trigger, openProposal: open?.decision ?? null,
-          agreed: agreed.map((record) => record.statement), underDiscussion: this.discussing?.decision ?? null,
-        },
-        this.llmLog("moderator"),
-      );
-      if (this.check !== previous || this.group.slice(historyLength).some(isDecisionContext)) continue;
-      if (!d.is_decision) {
-        // Someone questions an agreed decision: ask the team first instead of reopening it.
-        if (d.challenged && !open) this.askToRevisit(agreed[d.challenged - 1]);
-        continue;
+    if (!d.is_decision && !d.challenged) {
+      if (!post || open) return;
+      const { message, sender } = post;
+      if (this.stage === "ideation" && d.invitation_quote && message.text.includes(d.invitation_quote)) {
+        // Use the actual public wording and display name, including for anonymous posts.
+        this.moderatorSays("I passed this question to everyone’s Personal Agent.", { type: "angle_requested" },
+          { author: message.author, text: message.text });
+        await this.askAboutAngle(message.text, "find_contribution", message);
+      } else {
+        await this.runReactions(message, sender);
       }
-      if (this.alreadyAgreed(d.decision)) {
-        // The team talked it over and kept the agreed wording: nothing left to revisit.
-        if (this.discussing?.recordId) this.discussing = null;
-        continue;
-      }
-      if (open) {
-        if (sameText(open.decision, d.decision)) continue;
-        // Replace the open check only while few have answered; otherwise let it finish first.
-        const answered = Object.keys(open.answers).length;
-        if (trigger !== "host_request" && answered / open.askedOf.length >= this.rules.supersedeBelowAnswered) continue;
-      }
-      // A new version of a decision the team is revisiting replaces the agreed one once everyone agrees.
-      await this.openCheck(d, this.discussing?.recordId);
-      this.pendingDetection = undefined;
+      return;
     }
+
+    // Later discussion can supersede a decision. A receipt for a manual Ask cannot.
+    if (this.group.slice(historyLength).some(isDecisionContext)) return;
+    if (!d.is_decision) {
+      if (d.challenged && !open) this.askToRevisit(agreed[d.challenged - 1]);
+      return;
+    }
+    if (this.alreadyAgreed(d.decision)) {
+      if (this.discussing?.recordId) this.discussing = null;
+      return;
+    }
+    if (open) {
+      if (sameText(open.decision, d.decision)) return;
+      const answered = Object.keys(open.answers).length;
+      if (trigger !== "host_request" && answered / open.askedOf.length >= this.rules.supersedeBelowAnswered) return;
+    }
+    await this.openCheck(d, this.discussing?.recordId);
   }
 
   /** The Moderator asks, without naming anyone, whether the team wants to revisit an agreed decision. */
@@ -744,8 +748,9 @@ export class Meeting {
     return msg;
   }
 
-  private moderatorSays(text: string, note: ModeratorNote): void {
-    this.addGroup("Moderator", "moderator", text, note);
+  private moderatorSays(text: string, note: ModeratorNote, quote?: Quote): void {
+    const line = this.addGroup("Moderator", "moderator", text, note);
+    if (quote) line.quote = quote;
     this.log("mod_to_group", "moderator", "group", { text, note });
   }
 
@@ -759,7 +764,7 @@ export class Meeting {
 
   /** Commit a private draft after checking the latest group and private history for concurrent duplicates. */
   private addSuggestion(user: string, source: ShareSuggestionCard["source"], nudge: string, draft: string,
-                        evidenceIds: string[], checkId?: string): boolean {
+                        evidenceIds: string[], context: Pick<ShareSuggestionCard, "checkId" | "relayedQuestion"> = {}): boolean {
     if (source !== "chat") {
       const normalize = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[\s\p{P}]+/gu, "");
       const equivalent = (s: string) => normalize(s) === normalize(draft);
@@ -769,7 +774,7 @@ export class Meeting {
              evidenceIds.every(id => c.evidenceIds!.includes(id)))))) return false;
       this.lastProactiveAt.set(user, this.now());
     }
-    this.addCard(user, { kind: "share_suggestion", id: this.nextId("card"), source, nudge, draft, status: "open", evidenceIds, checkId });
+    this.addCard(user, { kind: "share_suggestion", id: this.nextId("card"), source, nudge, draft, status: "open", evidenceIds, ...context });
     return true;
   }
 
@@ -809,7 +814,7 @@ export class Meeting {
   }
 }
 
-// A receipt can arrive while the Moderator is deciding whether a team message needs a check.
+// Public delivery receipts are not new decision evidence.
 function isDecisionContext(message: GroupMessage): boolean {
   return message.note?.type !== "angle_requested";
 }

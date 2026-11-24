@@ -64,7 +64,9 @@ export function detectDecision(input: DetectDecisionInput): DecisionDetection {
   const newest = users[users.length - 1];
   const none: DecisionDetection = { is_decision: false, decision: "", ambiguity: "", question: "", options: [], reason: "mock: no decision phrase" };
   if (!newest) return none;
-  if (input.trigger !== "host_request" && !DECISION_RE.test(newest.text)) return none;
+  if (input.trigger !== "host_request" && !DECISION_RE.test(newest.text)) {
+    return { ...none, invitation_quote: newest.text.match(/what (else|other) (could|can|campus).*$/i)?.[0] ?? "" };
+  }
   const aboutScope = /crowd|campus|library|cafeteria/i.test(users.map((m) => m.text).join(" "));
   return {
     is_decision: true,

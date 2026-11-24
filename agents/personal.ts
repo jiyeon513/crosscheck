@@ -15,7 +15,7 @@ type Base = {
 };
 export type ChatInput = Base & { stage: Stage; message: string; reference?: Card | GroupMessage | null; intent?: "invite_brainstorm" };
 export type ReactInput = Base & { newMessage: ChatLine };
-export type AngleReplyInput = Base & { angle: string; intent?: "find_contribution" | "invite_brainstorm" };
+export type AngleReplyInput = Base & { angle: string; intent?: "find_contribution" | "invite_brainstorm"; requirePrivateIdea?: boolean };
 export type CheckSuggestInput = Base & { decision: string; question: string; options: string[] };
 
 const string = { type: "string" };
@@ -115,7 +115,7 @@ function cardContext(reference: ChatInput["reference"]) {
     return { kind: reference.kind, author: reference.author, text: reference.text, angle };
   }
   switch (reference.kind) {
-    case "share_suggestion": return { kind: reference.kind, nudge: reference.nudge, draft: reference.draft };
+    case "share_suggestion": return { kind: reference.kind, nudge: reference.nudge, draft: reference.draft, ...(reference.relayedQuestion && { relayedQuestion: reference.relayedQuestion }) };
     case "concern": return { kind: reference.kind, label: reference.label, draft: reference.draft };
     case "understanding_check": return {
       kind: reference.kind, version: reference.version, decision: reference.decision, question: reference.question, options: reference.options,
@@ -194,10 +194,16 @@ export async function react(input: ReactInput, log?: Log, generate: Generate = c
 
 export async function angleReply(input: AngleReplyInput, log?: Log, generate: Generate = callPersonalJSON): Promise<AngleReply & { evidenceIds: string[] }> {
   const intent = input.intent ?? "find_contribution";
-  const item = await suggest(input, "personal/angle_reply", { intent, angle: input.angle }, intent === "invite_brainstorm", generate, log);
+  const none = { has_view: false, label: "", nudge: "", draft: "", evidenceIds: [] };
+  const privateIds = new Set(input.privateHistory.filter(turn => turn.role === "user").map(turn => turn.id));
+  if (input.requirePrivateIdea && !privateIds.size) return none;
+
+  const item = await suggest(input, "personal/angle_reply", {
+    intent, angle: input.angle, require_private_idea: Boolean(input.requirePrivateIdea),
+  }, intent === "invite_brainstorm", generate, log);
+  if (!item || (input.requirePrivateIdea && !item.evidenceIds.some(id => privateIds.has(id)))) return none;
   // The only label eligible to travel back to the Moderator is the Moderator's own public angle.
-  return item ? { has_view: true, label: input.angle, ...item }
-    : { has_view: false, label: "", nudge: "", draft: "", evidenceIds: [] };
+  return { has_view: true, label: input.angle, ...item };
 }
 
 export async function suggestCheckAnswer(input: CheckSuggestInput, log?: Log, generate: Generate = callPersonalJSON): Promise<CheckSuggestion & { evidenceIds: string[] }> {
