@@ -896,8 +896,7 @@ function shuffle<T>(items: T[]): T[] {
  */
 export function findPrivacyLeaks(meeting: Meeting): string[] {
   const leaks: string[] = [];
-  // Texts a member approved for the agents' table are shared on purpose.
-  const groupTexts = [...meeting.group.map((m) => m.text), ...meeting.table.approvedTexts()];
+  const groupTexts = meeting.group.map((m) => m.text);
   for (const user of meeting.participants) {
     const secrets = meeting
       .privateUserTexts(user)
@@ -905,8 +904,10 @@ export function findPrivacyLeaks(meeting: Meeting): string[] {
     for (const ev of meeting.trace) {
       if (ev.type !== "llm_call" || ev.from === `agent:${user}`) continue;
       const input = String(ev.data.input ?? "");
+      // On the agents' table a member may approve a text for one reader: a reason for the Moderator, a change for everyone.
+      const consented = meeting.table.consented(user, ev.from);
       for (const s of secrets) {
-        if (input.includes(s)) leaks.push(`${ev.from} (${String(ev.data.prompt)}) received ${user}'s private text: "${s.slice(0, 50)}"`);
+        if (input.includes(s) && !consented.some((t) => t.includes(s))) leaks.push(`${ev.from} (${String(ev.data.prompt)}) received ${user}'s private text: "${s.slice(0, 50)}"`);
       }
     }
   }

@@ -1,16 +1,11 @@
-// The agents' table in the UI: the live talk below the team chat, and each member's own drafts in their private window.
-// Everything here comes from view.table (agents/table-protocol.ts): code names only, plus the viewer's own drafts.
+// The agents' table in the UI: the table below the team chat (no names, finished steps only), and each member's own
+// agent in their private window. Everything here comes from view.table (agents/table-protocol.ts).
 import { useEffect, useState } from "react";
-import type { SpeechAct, TableDraft, TableMessage, ThreadView } from "../agents/table-protocol";
+import type { TableDraft, TableRound, ThreadView } from "../agents/table-protocol";
 import { AgentIcon, ModeratorIcon } from "./icons";
 import "./agents-table.css";
 
 type Act = (action: string, body: object) => Promise<void>;
-
-const ACT_LABEL: Record<SpeechAct, string> = {
-  ask: "asks", inform: "informs", propose: "proposes", counter: "counters",
-  accept: "accepts", reject: "rejects", justify: "explains", concede: "concedes",
-};
 
 function useRun(act: Act) {
   const [busy, setBusy] = useState(false);
@@ -29,7 +24,7 @@ function useRun(act: Act) {
   return { busy, error, run };
 }
 
-/** Below the team chat: the offer after a split, then the talk as it happens. */
+/** Below the team chat: the offer after a split, then the table as it happens. */
 export function TableBelowChat({ table, act }: { table: ThreadView[]; act: Act }) {
   const [hidden, setHidden] = useState<string | null>(null);
   const latest = table[table.length - 1];
@@ -50,8 +45,8 @@ function TableOffer({ thread, act, onHide }: { thread: ThreadView; act: Act; onH
         </button>
       </header>
       <p className="at-note">
-        The Moderator asks each Personal Agent, under a code name, why its member read “{thread.decision}” that way, and
-        looks for one wording that works for everyone. Anything from your private notes is sent only if you approve it.
+        Each Personal Agent first tells the Moderator, alone, why its member read “{thread.decision}” that way. Then the agents
+        work on one wording together, without names. Anything from your private notes is sent only if you approve it.
       </p>
       <div className="at-actions">
         <button className="btn primary small" type="button" disabled={busy} onClick={() => run("table/start", { threadId: thread.id })}>
@@ -63,28 +58,32 @@ function TableOffer({ thread, act, onHide }: { thread: ThreadView; act: Act; onH
   );
 }
 
+function statusLine(thread: ThreadView): string {
+  if (thread.status === "bridged") {
+    return thread.bridgedBy === "agents" ? "The agents settled on one of their changes" : "Every agent accepted a wording";
+  }
+  if (thread.status === "no_bridge") return "No wording found yet";
+  const waiting = `waiting for ${thread.waitingFor} of ${thread.agents}`;
+  if (!thread.waitingFor) return "The Moderator is writing a wording";
+  if (thread.step === "position") return `Step 1 · the Moderator talks with each agent alone · ${waiting}`;
+  const n = thread.rounds.length;
+  return thread.step === "respond" ? `Wording ${n} · agents are answering · ${waiting}` : `Wording ${n} · agents are reacting to the changes · ${waiting}`;
+}
+
 function TableTalk({ thread, onHide }: { thread: ThreadView; onHide?: () => void }) {
   const talking = thread.status === "talking";
   const [open, setOpen] = useState(talking);
   useEffect(() => {
     if (!talking) setOpen(false);
   }, [talking]);
-  const status = talking
-    ? thread.waitingFor
-      ? `Round ${thread.round} · waiting for ${thread.waitingFor} of ${thread.agents} agents`
-      : `Round ${thread.round} · the Moderator is thinking`
-    : thread.status === "bridged"
-      ? "A wording every agent could accept"
-      : "No wording found yet";
   return (
     <section className={`agents-table ${thread.status}`} aria-label="Agents' table">
       <header className="at-head">
         <ModeratorIcon size={15} />
         <strong>Agents’ table</strong>
-        <span className={`at-status ${thread.status}`}>{status}</span>
-        {thread.yours ? <span className="at-yours">you are {thread.yours}</span> : null}
+        <span className={`at-status ${thread.status}`}>{statusLine(thread)}</span>
         <button className="at-toggle" type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
-          {open ? "Hide the talk" : `Show the talk (${thread.messages.length})`}
+          {open ? "Hide" : "Show the table"}
         </button>
         {onHide ? (
           <button className="at-close" type="button" onClick={onHide} aria-label="Hide" title="Hide">
@@ -94,65 +93,98 @@ function TableTalk({ thread, onHide }: { thread: ThreadView; onHide?: () => void
       </header>
       {!talking && thread.bridge ? <p className="at-bridge">“{thread.bridge}”</p> : null}
       {open ? (
-        <ol className="at-messages">
-          {thread.messages.map((m) => (
-            <TableLine key={m.id} message={m} yours={thread.yours} />
+        <div className="at-body">
+          <p className="at-private">
+            <AgentIcon size={12} /> Each agent told the Moderator its member’s reasons alone. Those stay private; only wordings and
+            answers are shown here, without names.
+          </p>
+          {thread.rounds.map((round, index) => (
+            <RoundView key={round.round} round={round} index={index + 1} />
           ))}
-        </ol>
+        </div>
       ) : null}
     </section>
   );
 }
 
-function TableLine({ message: m, yours }: { message: TableMessage; yours?: string }) {
-  const fromModerator = m.from === "Moderator";
-  const mine = m.from === yours;
+function RoundView({ round, index }: { round: TableRound; index: number }) {
   return (
-    <li className={`at-line ${fromModerator ? "mod" : "agent"} ${mine ? "mine" : ""}`}>
+    <article className="at-round">
       <p className="at-meta">
         <span className="at-from">
-          {fromModerator ? <ModeratorIcon size={12} /> : <AgentIcon size={12} />} {m.from}
-          {mine ? " (yours)" : ""}
+          <ModeratorIcon size={12} /> Moderator
         </span>
-        <span className="at-to">→ {m.to === "all" ? "all agents" : m.to === yours ? `${m.to} (yours)` : m.to}</span>
-        <span className={`act-chip ${m.act}`}>{ACT_LABEL[m.act]}</span>
-        {m.approved ? <span className="at-approved">approved by its member</span> : null}
+        <span className="act-chip propose">wording {index}</span>
       </p>
-      {m.act === "propose" && m.reading ? <p className="at-wording">“{m.reading}”</p> : null}
-      <p className="at-text">{m.text}</p>
-      {m.act !== "propose" && m.reading ? <p className="at-extra">Reading: {m.reading}</p> : null}
-      {m.condition ? <p className="at-extra">Condition: {m.condition}</p> : null}
-    </li>
+      <p className="at-wording">“{round.wording}”</p>
+      {round.note ? <p className="at-text">{round.note}</p> : null}
+      {round.answered ? (
+        <p className="at-tally">
+          {round.accepted ? <span className="act-chip accept">{round.accepted} accepted</span> : null}
+          {round.changed ? <span className="act-chip counter">{round.changed} proposed a change</span> : null}
+          {round.rejected ? <span className="act-chip reject">{round.rejected} rejected</span> : null}
+          {round.silent ? <span className="act-chip">{round.silent} no answer</span> : null}
+        </p>
+      ) : (
+        <p className="at-extra">The agents are answering. Their answers appear together once all have answered.</p>
+      )}
+      {round.changes.map((change) => (
+        <div className="at-line agent" key={change.id}>
+          <p className="at-meta">
+            <span className="at-from">
+              <AgentIcon size={12} /> An agent
+            </span>
+            <span className="act-chip counter">proposes a change</span>
+          </p>
+          <p className="at-wording">“{change.wording}”</p>
+          {round.reacted ? (
+            <p className="at-tally">
+              <span className="act-chip accept">{change.support} other {change.support === 1 ? "agent supports" : "agents support"}</span>
+              {change.object ? <span className="act-chip reject">{change.object} {change.object === 1 ? "objects" : "object"}</span> : null}
+            </p>
+          ) : (
+            <p className="at-extra">The other agents are reacting.</p>
+          )}
+        </div>
+      ))}
+    </article>
   );
 }
 
-/** In the private window: drafts waiting for the member, and what the agent already said for them. */
+const STEP_LABEL: Record<TableDraft["step"], string> = {
+  position: "Told the Moderator, privately",
+  respond: "At the table",
+  react: "Reacted to the other agents' changes",
+};
+
+/** In the private window: what your agent did at the table, and anything waiting for your approval. */
 export function TableDrafts({ table, act }: { table: ThreadView[]; act: Act }) {
   return (
     <>
       {table.map((thread) => {
         const waiting = thread.drafts.filter((d) => d.status === "waiting");
-        const said = thread.drafts.filter((d) => d.status !== "waiting");
-        if (!waiting.length && !said.length) return null;
+        const done = thread.drafts.filter((d) => d.status !== "waiting");
+        if (!waiting.length && !done.length) return null;
         return (
           <div className="at-drafts" key={thread.id}>
-            {said.length ? (
-              <details className="at-said">
+            {done.length ? (
+              <details className="at-said" open={thread.status === "talking"}>
                 <summary>
-                  <AgentIcon size={13} className="inline-icon" /> What your agent said for you as {thread.yours} ({said.length})
+                  <AgentIcon size={13} className="inline-icon" /> Your agent at the agents’ table ({done.length})
                 </summary>
                 <ul>
-                  {said.map((d) => (
+                  {done.map((d) => (
                     <li key={d.id}>
-                      <span className={`act-chip ${d.act}`}>{ACT_LABEL[d.act]}</span> {d.status === "declined" ? "Nothing (you chose not to send)." : d.text}
-                      {d.status === "closed" ? <em> · not sent, the round ended</em> : d.auto ? <em> · sent without asking: it used nothing private</em> : null}
+                      <span className="at-step">{STEP_LABEL[d.step]}</span> {describe(d)}
+                      {d.note ? <em className="at-why"> · {d.note}</em> : null}
+                      {d.status === "closed" ? <em> · not sent, the step ended</em> : d.auto && d.step !== "react" ? <em> · sent without asking: it used nothing private</em> : null}
                     </li>
                   ))}
                 </ul>
               </details>
             ) : null}
             {waiting.map((d) => (
-              <SpeakCard key={d.id} draft={d} act={act} />
+              <ApprovalCard key={d.id} draft={d} act={act} />
             ))}
           </div>
         );
@@ -161,32 +193,44 @@ export function TableDrafts({ table, act }: { table: ThreadView[]; act: Act }) {
   );
 }
 
-function SpeakCard({ draft, act }: { draft: TableDraft; act: Act }) {
+function describe(d: TableDraft): string {
+  if (d.status === "declined") return "Nothing (you chose not to send).";
+  if (d.step === "position") return d.text + (d.condition ? ` (condition: ${d.condition})` : "");
+  if (d.step === "react") {
+    return (d.reactions ?? []).map((r) => `${r.act === "accept" ? "supported" : "objected to"} “${r.wording}”`).join("; ") || "No reaction.";
+  }
+  return d.act === "accept" ? "Accepted the wording." : d.act === "reject" ? "Rejected the wording." : `Proposed a change: “${d.text}”`;
+}
+
+function ApprovalCard({ draft, act }: { draft: TableDraft; act: Act }) {
   const [text, setText] = useState(draft.text);
   const { busy, error, run } = useRun(act);
+  const position = draft.step === "position";
   return (
     <article className="pcard speak open">
-      <p className="pcard-kicker">Your agent would say this for you, as {draft.alias}</p>
-      <blockquote className="pcard-decision">Moderator · {draft.prompt}</blockquote>
-      <p className="at-meta">
-        <span className={`act-chip ${draft.act}`}>{ACT_LABEL[draft.act]}</span>
-      </p>
-      <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="What your agent would say" />
+      <p className="pcard-kicker">{position ? "Your agent would tell the Moderator, privately" : "Your agent would propose this change to the other agents"}</p>
+      <blockquote className="pcard-decision">{position ? `Moderator · ${draft.prompt}` : draft.prompt}</blockquote>
+      <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label={position ? "What your agent would say" : "The changed wording"} />
       {draft.condition ? <p className="pcard-why">Condition: {draft.condition}</p> : null}
-      {draft.why ? (
+      {draft.note ? (
         <p className="pcard-why">
-          <AgentIcon size={13} className="inline-icon" /> {draft.why}
+          <AgentIcon size={13} className="inline-icon" /> {draft.note}
         </p>
       ) : null}
+      {draft.why ? <p className="pcard-why">{draft.why}</p> : null}
       <div className="pcard-actions">
         <button className="btn primary small" type="button" disabled={busy || !text.trim()} onClick={() => run("table/speak", { draftId: draft.id, send: true, text })}>
-          Send for me
+          {position ? "Send to the Moderator only" : "Propose this change"}
         </button>
         <button className="btn ghost small" type="button" disabled={busy} onClick={() => run("table/speak", { draftId: draft.id, send: false })}>
-          Don't send
+          {position ? "Don't send" : "Don't propose"}
         </button>
       </div>
-      <p className="fine-left">Only your code name is shown at the table. Nothing is sent until you press Send.</p>
+      <p className="fine-left">
+        {position
+          ? "Only the Moderator reads this, without your name. It may use what you need to word a proposal for everyone, but never quotes you."
+          : "The change is shown to everyone without your name."}
+      </p>
       {error ? <p className="error small-note">{error}</p> : null}
     </article>
   );

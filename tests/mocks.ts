@@ -14,7 +14,7 @@ const userTexts = (turns: PrivateTurn[]) => turns.filter((t) => t.role === "user
 // These fixtures exercise the same response validation as live calls.
 export function enableFixtureModels() {
   useFixtureGenerator((prompt, context) => {
-    if (prompt === "personal/table_turn" || prompt === "moderator/propose_bridge") return tableFixture(prompt, context);
+    if (prompt.startsWith("personal/table_") || prompt === "moderator/propose_bridge") return tableFixture(prompt, context);
     switch (prompt) {
       case "moderator/find_missing_angle": return findMissingAngle(context as MissingAngleInput);
       case "moderator/detect_decision": return detectDecision(context as DetectDecisionInput);

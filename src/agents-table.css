@@ -209,3 +209,40 @@
 .pcard.speak .pcard-kicker {
   color: var(--mod);
 }
+
+/* Rounds on the table, and the private list */
+.at-body {
+  display: grid;
+  gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+.at-private {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.at-round {
+  display: grid;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.at-tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+}
+.at-step {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.at-why {
+  color: var(--agent);
+}

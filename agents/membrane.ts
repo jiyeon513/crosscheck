@@ -12,22 +12,22 @@ export type MembraneInput = {
   publicTexts: string[];
   /** Member names. A code name stops meaning anything once a name appears. */
   names: string[];
+  /** How many words in a row count as repeating a note (default 4). */
+  run?: number;
 };
-
-/** Runs of this many words in a row count as repeating a note. */
-const RUN = 4;
 
 /** Why the member must approve the message first, or null when it uses nothing private. */
 export function approvalReason(input: MembraneInput): string | null {
-  const publicRuns = new Set(input.publicTexts.flatMap((t) => runs(words(t))));
+  const n = input.run ?? 4;
+  const publicRuns = new Set(input.publicTexts.flatMap((t) => runs(words(t), n)));
   const secret = input.privateNotes.filter((n) => words(n.text).length > 0 && !input.publicTexts.some((p) => p.includes(n.text.trim())));
   if (input.evidenceIds.some((id) => secret.some((n) => n.id === id))) return "It uses what you told me privately.";
   const said = words(input.text);
-  const saidRuns = new Set(runs(said));
+  const saidRuns = new Set(runs(said, n));
   for (const note of secret) {
     const w = words(note.text);
     // A short note is private as a whole phrase.
-    if (w.length < RUN ? w.length >= 2 && contains(said, w) : runs(w).some((r) => saidRuns.has(r) && !publicRuns.has(r))) {
+    if (w.length < n ? w.length >= 2 && contains(said, w) : runs(w, n).some((r) => saidRuns.has(r) && !publicRuns.has(r))) {
       return "It repeats words you wrote privately.";
     }
   }
@@ -38,13 +38,14 @@ export function approvalReason(input: MembraneInput): string | null {
   return null;
 }
 
+/** Words, with hyphenated words kept whole ("Wi-Fi", "building-by-building"). */
 function words(text: string): string[] {
-  return text.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return text.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{N}-]+/u).map((w) => w.replace(/^-+|-+$/g, "")).filter(Boolean);
 }
 
-function runs(w: string[]): string[] {
+function runs(w: string[], n: number): string[] {
   const out: string[] = [];
-  for (let i = 0; i + RUN <= w.length; i++) out.push(w.slice(i, i + RUN).join(" "));
+  for (let i = 0; i + n <= w.length; i++) out.push(w.slice(i, i + n).join(" "));
   return out;
 }
 
