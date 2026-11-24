@@ -4,7 +4,7 @@
 // The agents run on the server (agents/meeting.ts, served by server/rooms.ts). This page polls
 // the signed-in member's own view of the room.
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
-import type { GroupMessage } from "../agents/protocol";
+import { TEAM_QUESTION_NOTICE, type GroupMessage } from "../agents/protocol";
 import { api, Logo, type RoomView } from "./api";
 import {
   Bubble,
@@ -413,6 +413,9 @@ function TeamLine({
   onDragState: (from: Source | null) => void;
 }) {
   const note = line.note;
+  // Rooms that were already open can still contain the original automatic notice.
+  const legacyRelay = note?.type === "angle_requested" && line.quote &&
+    line.text === "I passed this question to everyone’s Personal Agent.";
   // The Moderator's "Agreement check" message carries the live status of that check, as in the decision log.
   const liveCheck =
     note?.type === "check_opened" && agreement && agreement.version === note.version && agreement.status !== "cancelled";
@@ -449,7 +452,7 @@ function TeamLine({
       mine={mine}
       author={line.author}
       label={label}
-      text={line.text}
+      text={legacyRelay ? TEAM_QUESTION_NOTICE : line.text}
       quote={line.quote}
       variant={line.kind === "moderator" ? "moderator" : line.anonymous ? "anonymous" : undefined}
       messageId={line.id}
