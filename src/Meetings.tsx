@@ -57,7 +57,6 @@ export default function CurrentLog({
   agreement: Agreement | null;
   isHost: boolean;
   act: Act;
-  /** Propose a decision typed in the log; the Moderator opens an agreement check on it. */
   onPropose: (text: string) => Promise<void>;
 }) {
   const [scheduling, setScheduling] = useState(false);
@@ -166,7 +165,6 @@ function ProposeBox({ onPropose }: { onPropose: (text: string) => Promise<void> 
       await onPropose(proposal);
       setText("");
     } catch {
-      // Keep the text; the room shows why it did not work.
     } finally {
       setBusy(false);
     }
@@ -656,7 +654,7 @@ function defaultWhen() {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-// ---------- the meeting board: everything on the table, as the Moderator tracks it ----------
+// ---------- meeting board ----------
 
 const TOPIC_LABEL: Record<BoardTopic["status"], string> = {
   checking: "Checking privately",
@@ -673,7 +671,6 @@ const VERSION_LABEL: Record<BoardTopic["versions"][number]["status"], string> = 
   cancelled: "closed",
 };
 
-/** Proposals with their versions, the open question, the readings found (never who), and private questions. */
 export function BoardView({ board, agreement, isHost, act }: { board: Board; agreement: Agreement | null; isHost: boolean; act: Act }) {
   const topics = board.topics.slice().reverse();
   const polls = board.polls.filter((poll, index, all) => poll.status === "collecting" || index === all.length - 1).reverse();

@@ -30,7 +30,7 @@ type Target = "team" | "agent" | "log";
 /** Closed by default; the "Decision log" button in the team chat header opens it. */
 const LOG_OPEN_KEY = "crosscheck.logOpen.v2";
 const GROUP_POLL_MS = 20_000;
-/** The meeting phase, derived on the server from the meeting state (agents/meeting.ts phase()). */
+/** The phase comes from the server. */
 const STAGES: readonly (readonly [Phase, string, string])[] = [
   ["explore", "Explore & share ideas", "Ideas are coming in"],
   ["converge", "Narrow it down", "The team is narrowing a split or revisited decision down"],
@@ -73,7 +73,6 @@ export default function Room({
   const [menuOpen, setMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [hiddenAngles, setHiddenAngles] = useState<Set<string>>(() => new Set());
-  // On a phone one panel is shown at a time.
   const [phonePanel, setPhonePanel] = useState<"team" | "log" | "agent">("team");
   const teamEnd = useRef<HTMLDivElement | null>(null);
 
@@ -152,7 +151,6 @@ export default function Room({
     }
   }
 
-  /** A proposal goes to the team; the Moderator opens an agreement check on it. */
   async function propose(text: string) {
     try {
       await room.act("propose", { text });
@@ -197,7 +195,6 @@ export default function Room({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  // Decisions from earlier meetings, and the next meeting, for the top of the private window.
   const carried: CarriedOver | undefined = useMemo(() => {
     if (!detail) return undefined;
     const titleOf = new Map(detail.meetings.map((m) => [m.id, m.title]));

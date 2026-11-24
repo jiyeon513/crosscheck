@@ -8,13 +8,9 @@
 //   silence 60 s  ──► moderator: "is an angle missing?" ──► every personal agent ──► private nudge  (ideation)
 //   private message ► that user's personal agent only
 //   all answers in ─► moderator compares anonymous labels ──► "Agreed n/n" or one anonymous question
-//   private question ► every personal agent pre-fills its member's answer ► member sends it ► moderator combines
-//                      the anonymous answers ──► only the result is posted (back room)
-//   member quiet while the team talks ► their own agent only, and only from their own notes (facilitation)
-//   two agents both have something on the same angle or message ► each member is offered, privately and without
-//                      names, to combine ideas ► only if both say yes: names, one joint draft, posted together
-//   check opens     ► each agent reads its member's stance ► the member may share it, without a name ► the board
-//                      shows the mix (once at least two shared)
+//   private question ► each personal agent pre-fills its member's answer ► member sends it ► only the result is posted
+//   two agents with something on the same angle ► both members offered to combine ► names only if both accept
+//   member quiet while others post ► one private nudge from their own agent, from their own notes
 
 import { randomUUID } from "node:crypto";
 import { llmInfo, type LLMRecord } from "./llm";
@@ -81,9 +77,8 @@ export class Meeting {
   group: GroupMessage[] = [];
   check: Check | null = null;
   decisions: DecisionRecord[] = [];
-  /** Private questions the Moderator asked everyone (back room). */
+  /** Private questions the Moderator asked everyone. */
   polls: Poll[] = [];
-  /** Offers to combine two members' ideas (member-to-member, through their agents). */
   pairings: Pairing[] = [];
   trace: TraceEvent[] = [];
 
@@ -105,17 +100,13 @@ export class Meeting {
   private seq = 0;
   private now: () => number;
   private tracePrompts: boolean;
-  /** Every check of this meeting, in order, and the board topics they belong to. */
   private checks: Check[] = [];
   private topics: { id: string; checkIds: string[] }[] = [];
   /** Concerns told to the Moderator only while no check was open; they join the next check. */
   private heldConcerns: string[] = [];
-  /** Each member's notes from earlier meetings of the group. Only that member's agent reads them. */
   private memory = new Map<string, MemoryItem[]>();
-  /** Group length after each member's own last post (or when they joined), and when they were last nudged. */
   private lastOwnPost = new Map<string, number>();
   private quietNudgedAt = new Map<string, number>();
-  /** Lines before this index are earlier meetings' chat, loaded as context. */
   private historyLength = 0;
 
   constructor(opts: MeetingOptions) {
@@ -154,13 +145,12 @@ export class Meeting {
     }
   }
 
-  /** The room loaded earlier meetings' chat as context: quiet counts and the silence rule start from here. */
+  /** Earlier meetings' chat was loaded as context; quiet counts start after it. */
   markHistoryLoaded(): void {
     this.historyLength = this.group.length;
     for (const user of this.participants) this.lastOwnPost.set(user, this.group.length);
   }
 
-  /** The server hands each member's saved notes to the meeting. Only that member's agent will read them. */
   setMemory(user: string, items: MemoryItem[]): void {
     this.memory.set(user, items.slice(-this.rules.memoryLimit));
   }
@@ -182,11 +172,9 @@ export class Meeting {
     if (quote?.text?.trim()) msg.quote = { author: quote.author || "Someone", text: quote.text.trim() };
     if (attachments?.length) msg.attachments = attachments;
     this.log("user_to_group", anonymous ? "anonymous" : `user:${user}`, "group", {});
-    // Any post counts as taking part, named or not. Kept on the server only.
     this.lastOwnPost.set(user, this.group.length);
 
     // While members are answering a check, unprompted suggestion cards only distract; concerns still go through chat.
-    // After the reactions, a member who has stayed quiet may get one private nudge from their own agent.
     const jobs = this.checkOpen() ? [] : [this.runReactions(msg, user).then(() => this.runQuietNudges(user))];
     // Detection also runs while a check is open, so a real decision can replace a false alarm.
     jobs.push(this.runDetect("new_message"));
@@ -266,10 +254,7 @@ export class Meeting {
     await this.publish(user, finalText, mode === "anonymous");
   }
 
-  /**
-   * The member tells the Moderator a concern privately (back room). The team sees only its neutral label,
-   * never the text or who sent it. The text joins the open check (or the next one) for the comparison.
-   */
+  /** The team sees only the concern's label; the text joins the open (or next) check. */
   async tellModerator(user: string, cardId: string, finalText: string): Promise<void> {
     const card = this.findCard(user, cardId);
     if (card.kind !== "concern" || card.status !== "open") throw new Error("This concern is not open");
@@ -284,7 +269,6 @@ export class Meeting {
     );
   }
 
-  /** The member keeps what their agent suggested remembering. Returns the text, for the server to store. */
   saveMemoryCard(user: string, cardId: string): string {
     const card = this.findCard(user, cardId);
     if (card.kind !== "memory" || card.status !== "open") throw new Error("This note is not open");
@@ -292,9 +276,8 @@ export class Meeting {
     return card.text;
   }
 
-  // ---------- back room: stances ----------
+  // ---------- stances ----------
 
-  /** The member shares how they feel about the proposal being checked. The Moderator gets it without a name. */
   shareStance(user: string, checkId: string, stance: Stance): void {
     this.requireUser(user);
     const check = this.check;
@@ -307,12 +290,9 @@ export class Meeting {
     this.toModerator(user, { type: "stance", checkId, stance });
   }
 
-  // ---------- member to member, through the agents: combining two ideas ----------
+  // ---------- combining two members' ideas ----------
 
-  /**
-   * Two members' agents both had something on the same public angle or message. Each member is asked, privately
-   * and without names, whether to combine. Drafts and names are shared only between the two, and only if both agree.
-   */
+  /** Names and drafts are shared only between the two members, and only if both accept. */
   private offerPairing(members: string[], topic: string): void {
     const busy = (p: string) => this.pairings.some((x) => (x.status === "offered" || x.status === "matched") && x.members.includes(p));
     const withDraft = members.filter((p) => !busy(p) && this.latestDraft(p));
@@ -329,7 +309,6 @@ export class Meeting {
     }
   }
 
-  /** The member answers the offer. One "no" ends it with nothing revealed; two "yes" reveal names and a joint draft. */
   async answerPairing(user: string, pairingId: string, accept: boolean): Promise<void> {
     this.requireUser(user);
     const pairing = this.pairings.find((x) => x.id === pairingId);
@@ -354,7 +333,7 @@ export class Meeting {
       if (card) card.status = "matched";
     }
     const [a, b] = pairing.members;
-    // Both agreed: their two drafts are combined (the only call that sees them, and only with consent).
+    // Both accepted: the only call that sees their drafts.
     const res = await moderator.combinePieces(
       { goal: this.goal, topic: pairing.topic, pieces: [pairing.drafts[a], pairing.drafts[b]] }, this.llmLog("moderator:consented"),
     );
@@ -365,7 +344,6 @@ export class Meeting {
     }
   }
 
-  /** Either member posts the joint draft; it appears in the team chat under both names. */
   async postJoint(user: string, cardId: string, finalText: string): Promise<void> {
     const card = this.findCard(user, cardId);
     if (card.kind !== "joint" || card.status !== "open") throw new Error("This joint draft is not open");
@@ -377,7 +355,6 @@ export class Meeting {
     for (const p of pairing.members) {
       const joint = this.cards(p).find((c): c is JointCard => c.kind === "joint" && c.pairingId === pairing.id);
       if (joint) joint.status = "posted";
-      // Each member's own card for the same piece is now covered by the joint post.
       for (const c of this.cards(p)) {
         if (c.kind === "share_suggestion" && c.status === "open" && c.draft === pairing.drafts[p]) c.status = "superseded";
       }
@@ -401,12 +378,8 @@ export class Meeting {
     return this.cards(user).find((c): c is PairCard => c.kind === "pair" && c.pairingId === pairingId);
   }
 
-  // ---------- back room: a private question to everyone ----------
+  // ---------- private question to everyone ----------
 
-  /**
-   * Any member asks the Moderator to collect something privately (for example when everyone can meet).
-   * Each personal agent pre-fills its own member's answer; the member edits and sends it, or skips.
-   */
   async requestPoll(user: string, question: string): Promise<void> {
     this.requireUser(user);
     await this.openPollRound(question, 1);
@@ -432,7 +405,6 @@ export class Meeting {
     await Promise.all(poll.askedOf.map((p) => this.draftPollAnswer(p, poll).catch(() => undefined)));
   }
 
-  /** The member sends their answer to the Moderator only, or skips. */
   async answerPoll(user: string, pollId: string, answer: string | null): Promise<void> {
     this.requireUser(user);
     const poll = this.polls.find((item) => item.id === pollId);
@@ -457,7 +429,6 @@ export class Meeting {
     if (poll.askedOf.every((p) => poll.answers[p] !== undefined || poll.skipped.includes(p))) await this.runPollCombine(poll);
   }
 
-  /** Any member: combine the answers so far without waiting for everyone. */
   async combinePollNow(user: string, pollId: string): Promise<void> {
     this.requireUser(user);
     const poll = this.polls.find((item) => item.id === pollId);
@@ -474,7 +445,7 @@ export class Meeting {
       if (card && card.status === "open") card.status = "closed";
       else if (card) card.status = card.status === "skipped" ? "skipped" : "closed";
     }
-    // The Moderator gets the answers without names, in random order.
+    // Shuffled, without names.
     const answers = shuffle(Object.values(poll.answers));
     const res = await moderator.combinePoll({
       goal: this.goal, question: poll.question, answers, lastRound: poll.round >= this.rules.maxPollRounds,
@@ -485,7 +456,6 @@ export class Meeting {
       : res.follow_up ? " I will ask one follow-up privately." : " Nothing fits everyone yet; keep talking here.";
     this.moderatorSays(`Combined result: ${res.result}${next}`, { type: "poll_result", pollId: poll.id, fitsAll: res.fits_all });
     if (res.fits_all) {
-      // Confirm it like any decision: everyone answers privately, and the team sees one count.
       if (!this.checkOpen()) {
         await this.openCheck({
           decision: res.result, question: "Does this work for you?",
@@ -519,7 +489,6 @@ export class Meeting {
     return this.polls.find((poll) => poll.status === "collecting");
   }
 
-  /** The agent noticed a lasting fact. It becomes a card; nothing is kept unless the member saves it. */
   private offerMemory(user: string, text: string): void {
     const key = norm(text);
     const known = (this.memory.get(user) ?? []).some((item) => norm(item.text) === key) ||
@@ -687,7 +656,7 @@ export class Meeting {
           }
         : null,
       decisions: this.decisions,
-      // The board topic id stays internal; the public shape of `discussing` is unchanged.
+      // topicId stays internal.
       discussing: this.discussing ? (({ topicId: _topic, ...rest }) => rest)(this.discussing) : null,
       phase: this.phase(),
       board: this.board(),
@@ -696,14 +665,14 @@ export class Meeting {
     };
   }
 
-  /** The facilitation phase. Derived from the state, so it can never disagree with it. */
+  /** Derived from the state, never stored. */
   phase(): Phase {
     if (this.checkOpen() || this.openPoll()) return "confirm";
     if (this.discussing) return "converge";
     return "explore";
   }
 
-  /** Everything on the table, as the Moderator tracks it. Public: no names, no private text, no counts per reading. */
+  /** Public: no names, no private text, no counts per reading. */
   board(): Board {
     const topics: BoardTopic[] = [];
     for (const topic of this.topics) {
@@ -766,17 +735,13 @@ export class Meeting {
       const res = await personal.react({ ...context, newMessage: msg }, this.llmLog(`agent:${p}`));
       return res.suggest ? res : null;
     })));
-    // Two members both have something to add to the same message: offer them to combine (no names yet).
     const withCards = others.filter((_, i) => shown[i]);
     if (withCards.length >= 2) {
       this.offerPairing(withCards, msg.anonymous ? "an anonymous message in the team chat" : `${msg.author}'s message: “${clip(msg.text, 80)}”`);
     }
   }
 
-  /**
-   * Facilitation: a member has not posted while teammates kept talking. Their own agent looks at what they said
-   * privately; only if it fits the current discussion does the member get one private nudge. Nothing is public.
-   */
+  /** One private nudge for a quiet member, only if their own notes fit the discussion. */
   private async runQuietNudges(author: string): Promise<void> {
     if (this.checkOpen()) return;
     const quiet = this.participants.filter((p) =>
@@ -829,7 +794,6 @@ export class Meeting {
       this.toModerator(p, { type: "angle_reply", hasView: shown, label: shown ? angle : "" });
       return shown;
     }));
-    // Two members both have something on this angle: offer them to combine (no names yet).
     const withCards = this.participants.filter((_, i) => found[i]);
     if (withCards.length >= 2) this.offerPairing(withCards, `the angle “${angle}”`);
     return found.some(Boolean);
@@ -945,12 +909,11 @@ export class Meeting {
     d: Pick<DecisionDetection, "decision" | "question" | "options"> & { ambiguity?: string }, replaces?: string, topicId?: string,
   ): Promise<void> {
     const previous = this.check;
-    // Which board topic this is a version of: an explicit one, the one under discussion, or a new topic.
     const recordTopic = replaces ? this.checks.find((c) => c.id === this.decisions.find((r) => r.id === replaces)?.checkId)?.topicId : undefined;
     // A check that replaces one still collecting answers is a new version of the same topic.
     const replacedTopic = previous?.status === "collecting" ? previous.topicId : undefined;
     const topic = topicId ?? this.discussing?.topicId ?? recordTopic ?? replacedTopic ?? this.newTopic();
-    // Versions count within a topic: a brand-new decision is version 1 again.
+    // Versions count within a topic.
     const version = (this.topics.find((t) => t.id === topic)?.checkIds.length ?? 0) + 1;
     const replacing = previous?.status === "collecting";
     if (previous && replacing) previous.status = "cancelled";
@@ -1068,7 +1031,7 @@ export class Meeting {
           .map((group) => group.filter((i) => labels[i - 1] !== undefined).length));
         check.status = "mismatch";
         check.agreed = Math.min(sameReading, approved);
-        // For the board: the readings found. An answer in someone's own words is never shown verbatim.
+        // An answer in someone's own words is never shown verbatim.
         check.readings = [...new Set(res.groups
           .map((group) => labels[group[0] - 1] ?? "")
           .filter((label) => label && !isUnsure(label))
@@ -1251,7 +1214,7 @@ export class Meeting {
   }
 }
 
-/** Shared stances on a check, counted without names, and only once at least two members shared one. */
+/** Counted without names, and only once two or more were shared. */
 function stanceMix(check: Check): { stances?: Record<Stance, number> } {
   const shared = Object.values(check.stances ?? {});
   if (shared.length < 2) return {};
@@ -1303,7 +1266,7 @@ export function findPrivacyLeaks(meeting: Meeting): string[] {
       .privateUserTexts(user)
       .filter((t) => t.length >= 15 && !groupTexts.some((g) => g.includes(t)));
     for (const ev of meeting.trace) {
-      // Combining two members' drafts happens only after both agreed; that call is marked consented.
+      // Combining drafts happens only after both members accepted.
       if (ev.type !== "llm_call" || ev.from === `agent:${user}` || ev.from.endsWith(":consented")) continue;
       const input = String(ev.data.input ?? "");
       for (const s of secrets) {

@@ -12,7 +12,7 @@ type Base = {
   user: string; goal: string; group: ChatLine[]; privateHistory: PrivateTurn[];
   proposal?: { id: string; version: number; decision: string } | null;
   recentSuggestions?: RecentSuggestion[];
-  /** Notes this member saved in earlier meetings of the group. Only their own agent gets them; never evidence. */
+  /** The member's own notes from earlier meetings; never evidence. */
   memory?: string[];
 };
 export type ChatInput = Base & { stage: Stage; message: string; reference?: Card | GroupMessage | null; intent?: "invite_brainstorm" };
@@ -167,7 +167,6 @@ export async function chat(input: ChatInput, log?: Log, generate: Generate = cal
     }
     // At most one draft: when the model offers both, the concern is the one that matters to the decision.
     const draft = concern ? null : data.share_draft?.trim() ?? null;
-    // Something to remember is only a suggestion; the member decides. Missing means none.
     const remember = nonblank(data.remember) ? data.remember.trim().slice(0, 300) : null;
     requireFormat(
       !containsInternalId(input, [data.reply, draft, concern?.draft, concern?.label, remember].join(" "), input.reference),
@@ -228,13 +227,11 @@ export async function suggestCheckAnswer(input: CheckSuggestInput, log?: Log, ge
     // An unsupported guess is dropped, not fatal: the member still gets the question.
     const choice = data.suggested_option;
     const supported = nonblank(choice) && input.options.includes(choice) && evidence.length > 0;
-    // The stance is only a suggestion the member sees; an unknown value means none.
     const stance = STANCES.includes(data.stance as Stance) ? (data.stance as Stance) : null;
     return { suggested_option: supported ? choice : null, why: data.why.trim(), evidenceIds: supported ? evidence.map(e => e.id) : [], stance };
   });
 }
 
-/** The Moderator asked everyone a question privately. Pre-fill this member's answer from what they said; they send it. */
 export async function pollReply(input: PollReplyInput, log?: Log, generate: Generate = callPersonalJSON): Promise<PollReply> {
   return withRetry("poll_reply", async () => {
     const data = await generate("personal/poll_reply", { ...context(input), question: input.question }, pollSchema, log);
@@ -246,7 +243,6 @@ export async function pollReply(input: PollReplyInput, log?: Log, generate: Gene
   });
 }
 
-/** The member has not posted while the team talked. Offer a draft only if something they said privately fits now. */
 export async function quietNudge(input: QuietNudgeInput, log?: Log, generate: Generate = callPersonalJSON): Promise<ReactResult & { evidenceIds: string[] }> {
   const item = await suggest(input, "personal/quiet_nudge", { recentMessages: input.recent.map(({ author, kind, text }) => ({ author, kind, text })) }, false, generate, log);
   return item ? { suggest: true, ...item } : { suggest: false, nudge: "", draft: "", evidenceIds: [] };

@@ -117,14 +117,13 @@ export async function compareUnderstanding(input: CompareInput, log?: Log): Prom
   };
 }
 
-// ---------- 4. Back room: combine everyone's private answers to one question (called when the answers are in) ----------
+// ---------- 4. Combine everyone's private answers (called when the answers are in) ----------
 
 export type CombinePollInput = {
   goal: string;
   question: string;
-  /** Anonymous, already shuffled. Skipped members are not in the list. */
+  /** Anonymous, already shuffled. */
   answers: string[];
-  /** True when this is already the follow-up round: then do not ask again. */
   lastRound: boolean;
 };
 
@@ -143,13 +142,12 @@ export async function combinePoll(input: CombinePollInput, log?: Log): Promise<P
   return {
     result: str(data.result) || (fits ? "There is an option that works for everyone." : "No single option works for everyone yet."),
     fits_all: fits,
-    // A follow-up is only asked when nothing fits and another round is allowed.
     follow_up: !fits && !input.lastRound ? str(data.follow_up) : "",
     reason: str(data.reason),
   };
 }
 
-// ---------- 5. Two members agreed to combine their ideas: one joint draft (called only after both said yes) ----------
+// ---------- 5. A joint draft for two members (called only after both accepted) ----------
 
 export type CombinePiecesInput = { goal: string; topic: string; pieces: [string, string] };
 

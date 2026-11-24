@@ -59,7 +59,7 @@ type Data = {
   chats: Record<string, ChatRecord[]>; // key: group code
   opened: Record<string, string>; // key: "<lower-case name>|<code>", last time the member opened the group
   files: Record<string, FileRecord>; // key: file id
-  /** What each member's personal agent remembers in one group. Only that member and their own agent read it. */
+  /** Agent notes per member and group; only that member and their agent read them. */
   memory: Record<string, MemoryItem[]>; // key: "<lower-case name>|<code>"
 };
 

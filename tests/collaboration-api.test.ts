@@ -1,4 +1,4 @@
-// The new endpoints over HTTP: a private question, telling the Moderator only, and notes kept across meetings.
+// Private questions, telling the Moderator only, and agent notes across meetings, over HTTP.
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";

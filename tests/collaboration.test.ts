@@ -1,5 +1,5 @@
-// The four architecture additions: the back room (private questions, telling the Moderator only), one meeting
-// state (the board and its phase), agent memory across meetings, and the quiet-member nudge.
+// Private questions, concerns told to the Moderator only, the meeting board, agent notes, the quiet-member nudge,
+// stances, and combining two members' ideas.
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { findPrivacyLeaks, Meeting } from "../agents/meeting";

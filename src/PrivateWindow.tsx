@@ -529,7 +529,6 @@ function statusLabel(status: string) {
   }
 }
 
-/** The Moderator's private question (back room). The agent pre-fills an answer; only the member sends it. */
 function PollCardView({ card, act, onAsk }: { card: PollCard; act: Act; onAsk: (text: string) => void }) {
   const [text, setText] = useState(card.draft);
   const [touched, setTouched] = useState(false);
@@ -592,7 +591,6 @@ function PollCardView({ card, act, onAsk }: { card: PollCard; act: Act; onAsk: (
   );
 }
 
-/** The agent noticed something lasting. Nothing is kept unless the member says so. */
 function MemoryCardView({ card, act }: { card: MemoryCard; act: Act }) {
   const { busy, error, run } = useCardAction(act);
   return (
@@ -616,7 +614,6 @@ function MemoryCardView({ card, act }: { card: MemoryCard; act: Act }) {
   );
 }
 
-/** What this member's agent remembers in this group. Only they see it; they can add and forget notes. */
 function MemoryNotes({ items, act }: { items: MemoryItem[]; act: Act }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -679,7 +676,6 @@ function MemoryNotes({ items, act }: { items: MemoryItem[]; act: Act }) {
 
 const STANCE_LABEL: Record<Stance, string> = { support: "Support", hesitant: "Hesitant", unsure: "Unsure" };
 
-/** How the member feels about the proposal. Their agent suggests one; nothing is shared until they click. */
 function StanceRow({ card, act }: { card: UnderstandingCheckCard; act: Act }) {
   const { busy, error, run } = useCardAction(act);
   return (
@@ -718,7 +714,6 @@ const PAIR_STATUS: Record<PairCard["status"], string> = {
   closed: "This offer is closed. Nothing was shared.",
 };
 
-/** Another member's agent also has something on the same angle or message. Nobody is named until both say yes. */
 function PairCardView({ card, act }: { card: PairCard; act: Act }) {
   const { busy, error, run } = useCardAction(act);
   return (
@@ -745,7 +740,6 @@ function PairCardView({ card, act }: { card: PairCard; act: Act }) {
   );
 }
 
-/** Both members said yes: one joint draft that either of them can post under both names. */
 function JointCardView({ card, act }: { card: JointCard; act: Act }) {
   const [text, setText] = useState(card.draft);
   const { busy, error, run } = useCardAction(act);

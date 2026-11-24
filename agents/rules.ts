@@ -18,9 +18,9 @@ export type Rules = {
   privateContextTurns: number;
   /** A new decision replaces the open check only while fewer than this share of members have answered it. */
   supersedeBelowAnswered: number;
-  /** A member who has not posted while teammates posted this many messages may get a private nudge from their agent. */
+  /** A member quiet while teammates posted this many messages may get one private nudge. */
   quietAfterMessages: number;
-  /** A private question is asked again (with the Moderator's follow-up) at most this many rounds in total. */
+  /** Rounds a private question may take, including the follow-up. */
   maxPollRounds: number;
   /** How many notes a member's agent keeps per group. */
   memoryLimit: number;

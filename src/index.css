@@ -3001,7 +3001,7 @@ button.schedule-row.past:hover {
   overflow-x: hidden;
 }
 
-/* ---------- Restored from our web client (merged-app branch) ---------- */
+/* ---------- Room header, stage bar, message actions, menus, phone tabs ---------- */
 
 /* Room header: connection badge, Invite and the room menu button. */
 .room-header .header-actions {
@@ -3286,7 +3286,7 @@ textarea.growing-input {
   min-height: 34px;
 }
 
-/* ---------- architecture v2: phase strip, board, back room, agent notes ---------- */
+/* ---------- Phase strip, board, private questions, agent notes ---------- */
 
 .phase-strip {
   display: flex;
@@ -3503,7 +3503,7 @@ mark.diff-add {
   font-size: 12.5px;
 }
 
-/* ---------- stances and combining ideas ---------- */
+/* ---------- Stances and combining ideas ---------- */
 .stance-row {
   display: grid;
   gap: 6px;

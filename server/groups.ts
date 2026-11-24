@@ -136,10 +136,7 @@ export function removeMeeting(name: string, code: string, meetingId: string) {
   return { ok: true };
 }
 
-/**
- * POST /api/groups/demo — a sample group to try the app alone: a few earlier team messages from sample
- * teammates (they are chat history only, not accounts) and two meetings, one in progress and one coming up.
- */
+/** POST /api/groups/demo — a sample group with earlier chat and two meetings. */
 export function createDemoGroup(name: string) {
   const group = createGroup(name, { title: "Demo · Pick one topic for our team project" });
   const now = Date.now();

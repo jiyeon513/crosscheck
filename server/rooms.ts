@@ -25,7 +25,7 @@ type Room = {
   meeting: Meeting;
   savedGroup: number;
   savedDecisions: number;
-  /** Who posted each anonymous message. Kept on the server; only the poster's own view marks it as theirs. */
+  /** Who posted each anonymous message; only the poster's own view marks it. */
   anonymousBy: Map<string, string>;
 };
 
@@ -59,7 +59,6 @@ function createRoom(code: string, meetingId: string, host: string): Room {
   (meeting as unknown as { userMsgsAtLastAngleRun: number }).userMsgsAtLastAngleRun = history.filter(
     (line) => line.kind === "user",
   ).length;
-  // Quiet-member counts start from this meeting's own posts too.
   meeting.markHistoryLoaded();
   meeting.setMemory(host, memoryFor(host, code));
 
@@ -89,7 +88,7 @@ export function joinRoom(name: string, body: Body) {
   return { roomKey: key };
 }
 
-// ---------- what each member's agent remembers across the meetings of a group ----------
+// ---------- agent notes across a group's meetings ----------
 
 const MEMORY_LIMIT = 20;
 const memoryKey = (name: string, code: string) => `${name.toLowerCase()}|${code}`;
@@ -149,7 +148,6 @@ export async function roomAction(name: string, key: string, action: string, body
       const view = meeting.view(name);
       return {
         ...view,
-        // The poster sees their own anonymous posts as theirs; nobody else's view changes.
         group: view.group.map((message) => (room.anonymousBy.get(message.id) === name ? { ...message, mine: true } : message)),
         meetingId: room.meetingId,
         // This meeting's decision log as saved (with any wording fixes by members).
