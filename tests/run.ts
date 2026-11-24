@@ -15,6 +15,7 @@ import { llmInfo, settings, usageSummary } from "../agents/llm";
 import { enableFixtureModels } from "./mocks";
 import * as moderator from "../agents/moderator";
 import * as personal from "../agents/personal";
+import * as critic from "../agents/critic";
 
 type Fixture = {
   id: string;
@@ -44,12 +45,19 @@ const option = (name: string) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const valueFlags = new Set(["only", "repeat", "model"]);
+const valueFlags = new Set(["only", "repeat", "model", "critic", "critic-mode"]);
 const positional = argv.filter((a, i) => !a.startsWith("--") && !valueFlags.has((argv[i - 1] ?? "").replace(/^--/, "")));
 
 if (flag("dry-run")) process.env.LLM_DRY_RUN = "1";
 if (flag("mock") || flag("dry-run") || !settings().apiKey) enableFixtureModels();
 if (option("model")) process.env.LLM_MODEL = option("model");
+// --critic <model> [--critic-mode always]: run the moderator fixtures through the critic as the app does.
+if (option("critic")) {
+  process.env.CRITIC_LLM_MODEL = option("critic");
+  if (option("critic-mode")) process.env.CRITIC_MODE = option("critic-mode");
+  FNS["moderator.detectDecision"] = critic.detectDecisionReviewed;
+  FNS["moderator.compareUnderstanding"] = critic.compareUnderstandingReviewed;
+}
 const repeat = Math.max(1, Number(option("repeat") || 1));
 const only = option("only");
 const agentFilter = positional[0];
@@ -59,6 +67,7 @@ const agentFilter = positional[0];
 // "key": { "one_of": [..] }            any of these
 // "key": { "includes_any": [..] }      text contains at least one (ignore case)
 // "key": { "includes_all": [..] }      text contains all
+// "key": { "includes_each": [[..], [..]] }  for each list, text contains at least one (e.g. both readings among the options)
 // "key": { "not_includes_any": [..] }  text contains none (for example: no participant names)
 // "key": { "max_words": 30 }           word limit
 // "key": { "min_length": 2 } / { "max_length": 4 } / { "length": 1 }   for lists
@@ -82,6 +91,7 @@ function check(actual: Record<string, unknown>, expect: Record<string, unknown>)
     if (r.one_of && !list(r.one_of).includes(text.trim())) fails.push(`${key}: expected one of ${JSON.stringify(r.one_of)}, got ${shown}`);
     if (r.includes_any && !list(r.includes_any).some((w) => text.includes(w))) fails.push(`${key}: should mention one of ${JSON.stringify(r.includes_any)}, got ${shown}`);
     if (r.includes_all) for (const w of list(r.includes_all)) if (!text.includes(w)) fails.push(`${key}: should mention "${w}", got ${shown}`);
+    if (Array.isArray(r.includes_each)) for (const group of r.includes_each) if (!list(group).some((w) => text.includes(w))) fails.push(`${key}: should mention one of ${JSON.stringify(group)}, got ${shown}`);
     if (r.not_includes_any) for (const w of list(r.not_includes_any)) if (text.includes(w)) fails.push(`${key}: must not mention "${w}", got ${shown}`);
     if (typeof r.max_words === "number" && text.split(/\s+/).filter(Boolean).length > r.max_words) fails.push(`${key}: longer than ${r.max_words} words`);
     const len = Array.isArray(value) ? value.length : text.length;

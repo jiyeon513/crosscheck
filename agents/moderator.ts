@@ -72,7 +72,8 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
     (!questionMark.test(newest.text) || questionMark.test(invitation)) ? invitation : "";
   const options = strList(data.options).slice(0, 4);
   const ok = Boolean(data.is_decision) && str(data.decision).length > 0;
-  if (ok && !options.some(isUnsure)) options.push("Not sure yet");
+  // The "not sure" option follows the options' language.
+  if (ok && !options.some(isUnsure)) options.push(/[\uac00-\ud7a3]/.test(options.join(" ")) ? "아직 잘 모르겠어요" : "Not sure yet");
   return {
     is_decision: ok,
     invitation_quote: !ok && input.trigger === "new_message" && !input.openProposal ? groundedInvitation : "",

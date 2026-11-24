@@ -15,6 +15,8 @@ import * as moderator from "./moderator";
 import * as personal from "./personal";
 import { DEFAULT_RULES, type Rules } from "./rules";
 import { AgentsTable, type TableHost } from "./table";
+// A stronger model reviews a check before it opens and the follow-up after a split (off unless CRITIC_LLM_MODEL is set).
+import { compareUnderstandingReviewed, detectDecisionReviewed } from "./critic";
 import { isUnsure, norm } from "./format";
 import { TEAM_QUESTION_NOTICE } from "./protocol";
 import type {
@@ -280,7 +282,7 @@ export class Meeting {
       options: ["Yes, as stated", "I understood it differently", "Not sure yet"],
     };
     try {
-      const d = await moderator.detectDecision({
+      const d = await detectDecisionReviewed({
         goal: this.goal,
         group: [...this.groupContext(), { author, text: proposal, kind: "user" }],
         trigger: "host_request",
@@ -463,7 +465,7 @@ export class Meeting {
     const agreed = this.agreedRecords();
     let d: DecisionDetection;
     try {
-      d = await moderator.detectDecision({
+      d = await detectDecisionReviewed({
         goal: this.goal, group, trigger, openProposal: open?.decision ?? null,
         agreed: agreed.map(record => record.statement), underDiscussion: this.discussing?.decision ?? null,
       }, this.llmLog("moderator"));
@@ -622,7 +624,7 @@ export class Meeting {
     let split = false;
     try {
       const labels = shuffle(Object.values(check.answers));
-      const res = await moderator.compareUnderstanding(
+      const res = await compareUnderstandingReviewed(
         { decision: check.decision, question: check.question, labels, concerns: [...check.concerns] },
         this.llmLog("moderator"),
       );

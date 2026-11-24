@@ -131,7 +131,7 @@ const OPENROUTER = "https://openrouter.ai/api/v1";
 
 async function complete<T>(
   prompt: string, system: string, user: string, context: object,
-  log?: (record: LLMRecord) => void, schema?: object,
+  log?: (record: LLMRecord) => void, schema?: object, model?: string,
 ): Promise<T> {
   const s = settings();
   const started = Date.now();
@@ -146,7 +146,7 @@ async function complete<T>(
   const baseUrl = schema ? OPENROUTER : s.baseUrl;
   if (!s.apiKey && (schema || baseUrl === OPENROUTER)) throw new Error("OPENROUTER_API_KEY is required on the API server.");
   const body: Record<string, unknown> = {
-    model: schema ? personalModel() : s.model,
+    model: model ?? (schema ? personalModel() : s.model),
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
     max_tokens: schema ? Math.max(2500, s.maxTokens) : s.maxTokens,
   };
@@ -184,11 +184,12 @@ async function complete<T>(
   return result;
 }
 
+/** model: a different model for this one call (for example the critic); the Moderator's model otherwise. */
 export function callJSON<T>(
-  prompt: string, vars: Record<string, string | number>, context: object, log?: (record: LLMRecord) => void,
+  prompt: string, vars: Record<string, string | number>, context: object, log?: (record: LLMRecord) => void, model?: string,
 ): Promise<T> {
   const tpl = loadPrompt(prompt);
-  return complete(prompt, fill(tpl.system, vars), fill(tpl.user, vars), context, log);
+  return complete(prompt, fill(tpl.system, vars), fill(tpl.user, vars), context, log, undefined, model);
 }
 
 export function callPersonalJSON<T>(
