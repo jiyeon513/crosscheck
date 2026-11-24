@@ -14,12 +14,16 @@ export type MembraneInput = {
   names: string[];
   /** How many words in a row count as repeating a note (default 4). */
   run?: number;
+  /** Count a repeated run only if it adds a word that appears in none of the public texts (it reveals something new). */
+  newWordsOnly?: boolean;
 };
 
 /** Why the member must approve the message first, or null when it uses nothing private. */
 export function approvalReason(input: MembraneInput): string | null {
   const n = input.run ?? 4;
   const publicRuns = new Set(input.publicTexts.flatMap((t) => runs(words(t), n)));
+  const publicWords = new Set(input.publicTexts.flatMap(words));
+  const reveals = (run: string) => !input.newWordsOnly || run.split(" ").some((w) => !publicWords.has(w));
   const secret = input.privateNotes.filter((n) => words(n.text).length > 0 && !input.publicTexts.some((p) => p.includes(n.text.trim())));
   if (input.evidenceIds.some((id) => secret.some((n) => n.id === id))) return "It uses what you told me privately.";
   const said = words(input.text);
@@ -27,7 +31,7 @@ export function approvalReason(input: MembraneInput): string | null {
   for (const note of secret) {
     const w = words(note.text);
     // A short note is private as a whole phrase.
-    if (w.length < n ? w.length >= 2 && contains(said, w) : runs(w, n).some((r) => saidRuns.has(r) && !publicRuns.has(r))) {
+    if (w.length < n ? w.length >= 2 && contains(said, w) && reveals(w.join(" ")) : runs(w, n).some((r) => saidRuns.has(r) && !publicRuns.has(r) && reveals(r))) {
       return "It repeats words you wrote privately.";
     }
   }

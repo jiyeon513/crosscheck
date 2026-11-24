@@ -177,6 +177,10 @@ test("membrane: what needs the member's approval before it leaves their agent", 
   assert.match(approvalReason({ ...base, text: "They are commuting from Daejeon Station, so later is better." })!, /repeats/);
   assert.match(approvalReason({ ...base, text: "My member finds it too risky." })!, /repeats/);
   assert.match(approvalReason({ ...base, text: "Taeho agrees with this." })!, /name/);
+  // For the Moderator's wordings: a phrase from a never-shared note counts only if it reveals a new word.
+  const shared = ["My member said only the cafeteria and library matter."];
+  assert.equal(approvalReason({ ...base, privateNotes: [{ id: "s", text: "only the cafeteria and the library matter" }], publicTexts: shared, text: "Start with the cafeteria and the library.", newWordsOnly: true }), null);
+  assert.match(approvalReason({ ...base, publicTexts: shared, text: "Meet after commuting from Daejeon Station.", newWordsOnly: true })!, /repeats/);
   // Words already said in the team chat are not private.
   assert.equal(approvalReason({ ...base, privateNotes: [{ id: "p3", text: "do the library and cafeteria" }], text: "Let's do the library and cafeteria first." }), null);
 });

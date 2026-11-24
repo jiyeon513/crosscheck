@@ -378,7 +378,7 @@ export class AgentsTable {
     const neverShared = Object.keys(thread.aliases).flatMap((p) => h.privateNotes(p));
     const publicTexts = this.publicTexts();
     const sharedTexts = [...publicTexts, ...reasons.map((r) => r.text), ...conditions];
-    return approvalReason({ text, evidenceIds: [], privateNotes: neverShared, publicTexts: sharedTexts, names: h.participants() }) !== null ||
+    return approvalReason({ text, evidenceIds: [], privateNotes: neverShared, publicTexts: sharedTexts, names: h.participants(), newWordsOnly: true }) !== null ||
       approvalReason({ text, evidenceIds: [], privateNotes: reasons, publicTexts: [...publicTexts, ...conditions], names: [], run: 8 }) !== null;
   }
 
