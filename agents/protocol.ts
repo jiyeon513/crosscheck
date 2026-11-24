@@ -47,7 +47,8 @@ export type PrivateTurn = { id?: string; role: "user" | "agent"; text: string };
 export type ShareSuggestionCard = {
   kind: "share_suggestion";
   id: string;
-  source: "chat" | "missing_angle" | "react";
+  source: "chat" | "missing_angle" | "react" | "group_question";
+  relayedQuestion?: Quote;
   nudge: string;
   draft: string;
   evidenceIds?: string[];
@@ -105,6 +106,8 @@ export type AgentToModerator =
 export type MissingAngle = { action: "none" | "ask_angle"; angle: string; group_prompt: string; reason: string };
 
 export type DecisionDetection = {
+  /** The exact clause in the new public message asking teammates to contribute ideas. */
+  invitation_quote?: string;
   is_decision: boolean;
   decision: string;
   ambiguity: string;

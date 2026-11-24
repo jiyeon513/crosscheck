@@ -1,5 +1,45 @@
 [
   {
+    "id": "relay_pitch_with_a_stated_need",
+    "fn": "moderator.detectDecision",
+    "input": {
+      "goal": "Choose a campus app for tonight’s proposal",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "We need an idea for tonight’s proposal. What about putting all the campus cafeteria menus in one place? I always have to check each one separately." }
+      ]
+    },
+    "expect": { "is_decision": false, "invitation_quote": "" }
+  },
+  {
+    "id": "relay_no_request_in_price_suggestion",
+    "fn": "moderator.detectDecision",
+    "input": {
+      "goal": "Choose a campus app for tonight’s proposal",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "What about putting all the campus cafeteria menus in one place?" },
+        { "author": "Taeho", "text": "I usually check the menus right before class ends." },
+        { "author": "Minsu", "text": "We could put the prices next to the menus, too." }
+      ]
+    },
+    "expect": { "is_decision": false, "invitation_quote": "" }
+  },
+  {
+    "id": "relay_invitation_to_contribute",
+    "fn": "moderator.detectDecision",
+    "input": {
+      "goal": "Choose a campus app for tonight’s proposal",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "We could put the prices next to the menus, too." },
+        { "author": "Soyeon", "text": "If both lunches cost about the same I would still be stuck choosing." },
+        { "author": "Minsu", "text": "We’ve got menus and prices. What else could we show students to help them decide where to eat?" }
+      ]
+    },
+    "expect": { "is_decision": false, "invitation_quote": "What else could we show students to help them decide where to eat?" }
+  },
+  {
     "id": "decision_lets_go_with",
     "fn": "moderator.detectDecision",
     "note": "A clear proposal to conclude. Scope is the aspect people could read differently.",
@@ -32,7 +72,7 @@
         { "author": "Jiwoo", "text": "What about predicting how crowded the cafeteria and library are?" }
       ]
     },
-    "expect": { "is_decision": false }
+    "expect": { "is_decision": false, "invitation_quote": "" }
   },
   {
     "id": "decision_reaction_is_not_decision",
