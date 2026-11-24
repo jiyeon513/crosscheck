@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { useFixtureGenerator } from "../agents/llm";
 import { Meeting } from "../agents/meeting";
 import * as personal from "../agents/personal";
-import type { Card } from "../agents/protocol";
+import { TEAM_QUESTION_NOTICE, type Card } from "../agents/protocol";
 import { enableFixtureModels } from "./mocks";
 
 enableFixtureModels();
@@ -170,7 +170,7 @@ test("a team invitation relays its original message privately, once per relevant
   assert.deepEqual(m.group.filter(line => line.kind === "user").map(line => line.text), [question, "Give me a second to think."]);
   const receipts = m.group.filter(line => line.kind === "moderator").map(({ id, at, ...line }) => line);
   assert.deepEqual(receipts, [{ author: "Moderator", kind: "moderator", note: { type: "angle_requested" },
-    text: "I passed this question to everyone’s Personal Agent.", quote: { author: "Minsu", text: question } }]);
+    text: TEAM_QUESTION_NOTICE, quote: { author: "Minsu", text: question } }]);
   for (const user of ["Minsu", "Jiwoo"]) {
     assert.equal(cards(m, user).some(c => c.kind === "share_suggestion" && c.source === "group_question"), false);
     assert.ok(!JSON.stringify(m.view(user)).includes(idea));
@@ -202,7 +202,7 @@ test("the team sees a delivery receipt even when nobody has relevant private not
   assert.equal(m.group.length, 2);
   const { id, at, ...receipt } = m.group[1];
   assert.deepEqual(receipt, { author: "Moderator", kind: "moderator", note: { type: "angle_requested" },
-    text: "I passed this question to everyone’s Personal Agent.", quote: { author: "Jiwoo", text: question } });
+    text: TEAM_QUESTION_NOTICE, quote: { author: "Jiwoo", text: question } });
   assert.ok(m.participants.every(user => cards(m, user).length === 0));
   assert.equal(m.trace.filter(e => e.data.type === "angle_query").length, 1);
   assert.equal(m.trace.filter(e => e.data.prompt === "personal/react").length, 0);

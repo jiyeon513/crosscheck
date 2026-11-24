@@ -15,6 +15,7 @@ import * as moderator from "./moderator";
 import * as personal from "./personal";
 import { DEFAULT_RULES, type Rules } from "./rules";
 import { isUnsure, norm } from "./format";
+import { TEAM_QUESTION_NOTICE } from "./protocol";
 import type {
   AgentToModerator,
   Attachment,
@@ -473,7 +474,7 @@ export class Meeting {
       const { message, sender } = post;
       if (this.stage === "ideation" && d.invitation_quote && message.text.includes(d.invitation_quote)) {
         // Use the actual public wording and display name, including for anonymous posts.
-        this.moderatorSays("I passed this question to everyone’s Personal Agent.", { type: "angle_requested" },
+        this.moderatorSays(TEAM_QUESTION_NOTICE, { type: "angle_requested" },
           { author: message.author, text: message.text });
         await this.askAboutAngle(message.text, "find_contribution", message);
       } else {

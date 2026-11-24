@@ -5,6 +5,9 @@ export type Stage = "ideation" | "agreement" | "done";
 
 // ---------- group chat ----------
 
+export const TEAM_QUESTION_NOTICE =
+  "Let’s see what we might be missing. I’m asking your Personal Agents to look for ideas you’ve had but haven’t shared with the group yet.";
+
 /** One line of the group chat, as the agents read it. */
 export type ChatLine = { id?: string; author: string; text: string; kind?: "user" | "moderator" };
 
