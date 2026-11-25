@@ -71,7 +71,7 @@ export class AgentsTable {
     thread.status = "talking";
     thread.round = 1;
     thread.messageId = h.say(
-      "I’ll talk it over with your Personal Agents: first with each one alone, then all of them together on one wording, without names. You can follow it below the chat. If they find a wording that could work for everyone, I’ll bring it here.",
+      "I’ll talk it over with your Personal Agents: first with each one alone, then all of them together on one compromise, without names. You can follow it below the chat. If they find a compromise that could work for everyone, I’ll bring it here.",
     );
     await this.startStep(thread, "position");
   }
@@ -184,14 +184,14 @@ export class AgentsTable {
       evidence = res.evidenceIds;
     } else if (step === "respond") {
       const res = await tableRespond({ ...base, wording: thread.wording!, table: publicRounds(thread), yourThread: mine(thread, user) }, log);
-      draft = { prompt: `The wording on the table: “${thread.wording}”`, act: res.act, text: res.wording ?? "", note: res.note };
+      draft = { prompt: `The compromise on the table: “${thread.wording}”`, act: res.act, text: res.wording ?? "", note: res.note };
       shareable = res.wording ?? "";
       evidence = res.act === "counter" ? res.evidenceIds : [];
     } else {
       const changes = this.changes(thread).filter((c) => c.from !== alias).map((c) => ({ id: c.id, wording: c.wording! }));
       const res = await tableReact({ ...base, wording: thread.wording!, changes, yourThread: mine(thread, user) }, log);
       draft = {
-        prompt: "The other agents proposed changes to the wording.", act: "inform", text: "", note: res.note,
+        prompt: "The other agents proposed changes to the compromise.", act: "inform", text: "", note: res.note,
         reactions: res.reactions.map((r) => ({ ...r, wording: changes.find((c) => c.id === r.target)!.wording })),
       };
     }
@@ -304,7 +304,7 @@ export class AgentsTable {
     const h = this.host();
     if (!wording) {
       this.end(thread, "no_bridge");
-      h.say(`The agents could not find one wording that works for everyone yet.${thread.wording ? ` The last one on the table was “${thread.wording}”.` : ""} Keep talking here; when the team settles on a version, I will check it again.`);
+      h.say(`The agents could not find one compromise that works for everyone yet.${thread.wording ? ` The last one on the table was “${thread.wording}”.` : ""} Keep talking here; when the team settles on a version, I will check it again.`);
       return;
     }
     thread.bridge = wording;

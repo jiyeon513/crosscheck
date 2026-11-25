@@ -899,7 +899,7 @@ export class Meeting {
       checkOpen: () => this.checkOpen(),
       openBridgeCheck: async (thread) => {
         const bridge = {
-          decision: thread.bridge!, question: "Does this wording work for you?",
+          decision: thread.bridge!, question: "Does this compromise work for you?",
           options: ["Yes, this works for me", "It does not work for me", "Not sure yet"],
         };
         if (this.checkOpen()) this.queueCheck(bridge, thread.replaces);

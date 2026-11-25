@@ -129,7 +129,7 @@ test("table: a Moderator wording that repeats a private reason is refused, and t
   const bridges = m.trace.filter((e) => e.type === "llm_call" && e.data.prompt === "moderator/propose_bridge");
   assert.equal(bridges.length, 2); // asked once more, then dropped
   assert.ok(!m.group.some((l) => l.text.includes("too big for one semester")));
-  assert.match(m.group.at(-1)!.text, /could not find one wording/);
+  assert.match(m.group.at(-1)!.text, /could not find one compromise/);
   assert.deepEqual(findPrivacyLeaks(m), []);
 });
 
