@@ -2140,7 +2140,8 @@ button.schedule-row.past:hover {
   border-radius: 999px;
   background: var(--agent-soft);
   color: var(--agent);
-  font-size: 11px;
+  font-size: 9px;
+  line-height: 1;
 }
 
 .sr-only {
@@ -2174,6 +2175,10 @@ button.schedule-row.past:hover {
 .pcard-toggle:focus-visible {
   outline: 2px solid var(--agent);
   outline-offset: 2px;
+}
+
+.pcard-toggle span[aria-hidden="true"] {
+  font-size: 9px;
 }
 
 .pcard.concern .pcard-toggle {

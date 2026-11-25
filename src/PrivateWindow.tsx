@@ -256,7 +256,7 @@ const SOURCE_LABEL: Record<ShareSuggestionCard["source"], string> = {
 function DraftToggle({ shown, onToggle, id }: { shown: boolean; onToggle: () => void; id: string }) {
   return (
     <button className="pcard-toggle" type="button" aria-expanded={shown} aria-controls={id} onClick={onToggle}>
-      <span aria-hidden="true">{shown ? "▾" : "▸"}</span> {shown ? "Hide draft" : "Show draft"}
+      <span aria-hidden="true">{shown ? "▲" : "▼"}</span> {shown ? "Hide draft" : "Show draft"}
     </button>
   );
 }
@@ -283,7 +283,7 @@ function ShareCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; 
           <span className="pcard-kicker">{SOURCE_LABEL[card.source]}</span>
           {open ? null : <span className="pcard-row-state">{statusLabel(card.status)}</span>}
           <span className="pcard-chevron" aria-hidden="true">
-            {shown ? "▾" : "▸"}
+            {shown ? "▲" : "▼"}
           </span>
           <span className="sr-only">{shown ? "Hide draft" : "Show draft"}</span>
         </button>
