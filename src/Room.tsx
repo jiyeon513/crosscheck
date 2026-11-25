@@ -24,6 +24,7 @@ import { currentMeeting, formatMeetingTime, type GroupDetail, type Meeting } fro
 import PrivateWindow, { type AgentReference } from "./PrivateWindow";
 import { Avatar } from "./ui";
 import { useRoom } from "./useRoom";
+import { TableBelowChat } from "./AgentsTable";
 
 type Target = "team" | "agent";
 
@@ -301,6 +302,7 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
                   ),
                 )
               )}
+              <TableBelowChat table={view?.table ?? []} act={room.act} />
               <div ref={teamEnd} />
             </div>
             <Composer
@@ -368,6 +370,8 @@ const NOTE_LABEL: Record<string, string> = {
   agreement_count: "Not agreed yet",
   check_opened: "Agreement check",
   check_closed: "Check closed",
+  no_proposal: "Nothing to check yet",
+  check_queued: "Checked next",
   reopen_prompt: "Revisit a decision?",
 };
 

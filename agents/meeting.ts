@@ -15,6 +15,9 @@ import * as moderator from "./moderator";
 import * as personal from "./personal";
 import { topicLabels } from "./topics";
 import { DEFAULT_RULES, type Rules } from "./rules";
+import { AgentsTable, type TableHost } from "./table";
+// A stronger model reviews a check before it opens and the follow-up after a split (off unless CRITIC_LLM_MODEL is set).
+import { compareUnderstandingReviewed, detectDecisionReviewed, reviewCheck } from "./critic";
 import { isUnsure, norm } from "./format";
 import { TEAM_QUESTION_NOTICE } from "./protocol";
 import type {
@@ -65,6 +68,8 @@ export class Meeting {
   check: Check | null = null;
   decisions: DecisionRecord[] = [];
   trace: TraceEvent[] = [];
+  /** After a split check, the Moderator talks it over with the agents under code names (agents/table.ts). */
+  readonly table = new AgentsTable(() => this.tableHost());
 
   private windows = new Map<string, PrivateItem[]>();
   private typing = new Map<string, number>();
@@ -78,6 +83,7 @@ export class Meeting {
   /** Agreed decisions the team chose to keep when asked, and the group length at that moment. */
   private kept = new Map<string, number>();
   private comparison?: { check: Check; inputs: string };
+  private nextChecks: { d: Pick<DecisionDetection, "decision" | "question" | "options"> & { ambiguity?: string }; replaces?: string }[] = [];
   private lastCompared = "";
   private seq = 0;
   private now: () => number;
@@ -258,6 +264,7 @@ export class Meeting {
     this.stage = "ideation";
     this.discussing = null;
     this.moderatorSays("The host closed this agreement check. Carry on.", { type: "check_closed" });
+    void this.openNextCheck().catch((error) => console.error("[CrossCheck] could not open the next check:", error));
   }
 
   /** Ask the Moderator how members might read a given proposal (question + options). */
@@ -267,7 +274,7 @@ export class Meeting {
       options: ["Yes, as stated", "I understood it differently", "Not sure yet"],
     };
     try {
-      const d = await moderator.detectDecision({
+      const d = await detectDecisionReviewed({
         goal: this.goal,
         group: [...this.groupContext(), { author, text: proposal, kind: "user" }],
         trigger: "host_request",
@@ -302,6 +309,7 @@ export class Meeting {
   /** Call every few seconds. Handles the rules that depend on time. */
   async tick(): Promise<void> {
     const t = this.now();
+    await this.table.tick(t);
     const check = this.check;
     if (check?.status === "collecting" && t - check.createdAt >= this.rules.checkTimeoutMs && Object.keys(check.answers).length >= 2) {
       await this.runCompare();
@@ -349,6 +357,7 @@ export class Meeting {
         : null,
       decisions: this.decisions,
       discussing: this.discussing ? { ...this.discussing } : null,
+      table: this.table.view(user),
       llm: llmInfo(),
     };
   }
@@ -457,27 +466,41 @@ export class Meeting {
   }
 
   /** Classify each post once so a team question is not also handled as an ordinary reaction. */
-  private async runDetect(trigger: "new_message" | "host_request", post?: { message: GroupMessage; sender: string }): Promise<void> {
+  private async runDetect(trigger: "new_message" | "host_request", post?: { message: GroupMessage; sender: string }, again = false): Promise<void> {
     const previous = this.check;
     const open = this.checkOpen() ? this.check : null;
     const historyLength = this.group.length;
     const group = this.groupContext(this.group.filter(isDecisionContext));
     const agreed = this.agreedRecords();
+    const input = {
+      goal: this.goal, group, trigger, openProposal: open?.decision ?? null,
+      agreed: agreed.map(record => record.statement), underDiscussion: this.discussing?.decision ?? null,
+    };
     let d: DecisionDetection;
     try {
-      d = await moderator.detectDecision({
-        goal: this.goal, group, trigger, openProposal: open?.decision ?? null,
-        agreed: agreed.map(record => record.statement), underDiscussion: this.discussing?.decision ?? null,
-      }, this.llmLog("moderator"));
+      d = await moderator.detectDecision(input, this.llmLog("moderator"));
     } catch (error) {
       // Personal Agents can still react to ordinary discussion if the Moderator is unavailable.
       if (post && !open && this.check === previous) await this.runReactions(post.message, post.sender);
       throw error;
     }
+    // A check opened while this message was being read: read it again against that check.
+    if (this.check !== previous && post && !again && this.checkOpen()) return this.runDetect(trigger, post, true);
     if (this.check !== previous || (open && open.status !== "collecting")) return;
 
+    // A request to change the open proposal: stop collecting answers so the old wording can never be agreed by default.
+    if (!d.is_decision && open && d.open_challenged) {
+      this.holdCheck(open);
+      return;
+    }
+
     if (!d.is_decision && !d.challenged) {
-      if (!post || open) return;
+      if (!post || open) {
+        if (trigger === "host_request" && !open) {
+          this.moderatorSays("I could not find a clear proposal to check yet. Say it in one sentence in the chat, then ask again.", { type: "no_proposal" });
+        }
+        return;
+      }
       const { message, sender } = post;
       if (this.stage === "ideation" && d.invitation_quote && message.text.includes(d.invitation_quote)) {
         // Use the actual public wording and display name, including for anonymous posts.
@@ -502,19 +525,60 @@ export class Meeting {
       // One extra qualifier can change the proposal even when the new text contains the old text.
       const wording = norm(d.decision);
       if (wording === norm(open.decision) || agreed.some(record => norm(record.statement) === wording)) return;
-      await this.openCheck(d, open.replaces);
+      const revised = await this.reviewBeforeOpening(input, d, previous);
+      if (revised) await this.openCheck(revised, open.replaces);
       return;
     }
     if (this.alreadyAgreed(d.decision)) {
       if (this.discussing?.recordId) this.discussing = null;
       return;
     }
-    if (open) {
-      if (sameText(open.decision, d.decision)) return;
-      const answered = Object.keys(open.answers).length;
-      if (trigger !== "host_request" && answered / open.askedOf.length >= this.rules.supersedeBelowAnswered) return;
+    if (open && sameText(open.decision, d.decision)) return;
+    // A different version of the open proposal replaces it. A decision about something else is checked next,
+    // unless few have answered (the open check may have been a false alarm).
+    if (open && !d.replaces_open && Object.keys(open.answers).length / open.askedOf.length >= this.rules.supersedeBelowAnswered) {
+      const next = await this.reviewBeforeOpening(input, d, previous);
+      if (next) this.queueCheck(next);
+      return;
     }
-    await this.openCheck(d, this.discussing?.recordId);
+    const reviewed = await this.reviewBeforeOpening(input, d, previous);
+    if (reviewed) await this.openCheck(reviewed, this.discussing?.recordId);
+  }
+
+  private queueCheck(d: Pick<DecisionDetection, "decision" | "question" | "options"> & { ambiguity?: string }, replaces?: string): void {
+    if (this.nextChecks.some((q) => sameText(q.d.decision, d.decision))) return;
+    this.nextChecks.push({ d, ...(replaces ? { replaces } : {}) });
+    this.moderatorSays(`Noted: "${d.decision}". I will check it with everyone as soon as the current check is done.`, { type: "check_queued" });
+  }
+
+  /** After a check ends, the next waiting decision is checked. An agents' table on the earlier topic keeps going. */
+  private async openNextCheck(): Promise<void> {
+    while (!this.checkOpen() && this.nextChecks.length) {
+      const next = this.nextChecks.shift()!;
+      if (this.alreadyAgreed(next.d.decision)) continue;
+      await this.openCheck(next.d, next.replaces, { keepTable: true });
+    }
+  }
+
+  /** The critic (when enabled) reviews a check only once it is about to open, so it never delays detection. */
+  private async reviewBeforeOpening(input: Parameters<typeof reviewCheck>[0], d: DecisionDetection, previous: Check | null) {
+    const reviewed = await reviewCheck(input, d, this.llmLog("moderator"));
+    return reviewed.is_decision && this.check === previous ? reviewed : null;
+  }
+
+  /** Close the open check without a result and treat its proposal as under discussion. */
+  private holdCheck(check: Check): void {
+    check.status = "cancelled";
+    this.closeCheckCards(check);
+    this.discussing = { decision: check.decision, status: "open", ...(check.replaces ? { recordId: check.replaces } : {}) };
+    this.moderatorSays(
+      `It sounds like the team may change "${check.decision}", so I stopped collecting answers. ` +
+        "When you settle on a version, even the same one, say it here and I will check it with everyone again.",
+      { type: "check_closed" },
+    );
+    // As after a split: no agreement, the proposal is under discussion, so the agents' table is offered.
+    this.table.offer(check);
+    void this.openNextCheck().catch((error) => console.error("[CrossCheck] could not open the next check:", error));
   }
 
   /** The Moderator asks, without naming anyone, whether the team wants to revisit an agreed decision. */
@@ -549,7 +613,8 @@ export class Meeting {
     }
   }
 
-  private async openCheck(d: Pick<DecisionDetection, "decision" | "question" | "options">, replaces?: string): Promise<void> {
+  private async openCheck(d: Pick<DecisionDetection, "decision" | "question" | "options">, replaces?: string,
+    options: { keepTable?: boolean } = {}): Promise<void> {
     const previous = this.check;
     const replacing = previous?.status === "collecting";
     if (previous && replacing) previous.status = "cancelled";
@@ -575,6 +640,7 @@ export class Meeting {
       createdAt: this.now(),
       ...(replaces ? { replaces } : {}),
     };
+    if (!options.keepTable) this.table.closeOpen();
     this.check = check;
     this.discussing = null;
     this.lastCompared = "";
@@ -620,9 +686,10 @@ export class Meeting {
         (this.comparison?.check === check && this.comparison.inputs === inputs)) return;
     const job = { check, inputs };
     this.comparison = job;
+    let split = false;
     try {
       const labels = shuffle(Object.values(check.answers));
-      const res = await moderator.compareUnderstanding(
+      const res = await compareUnderstandingReviewed(
         { decision: check.decision, question: check.question, labels, concerns: [...check.concerns] },
         this.llmLog("moderator"),
       );
@@ -671,10 +738,13 @@ export class Meeting {
           "Keep talking here. When the team settles on a version, say it in the chat and I will check it again. The host can also revise the proposal.",
         ].filter(Boolean).join(" ");
         this.moderatorSays(message, { type: "agreement_count", agreed: check.agreed, total });
+        split = true;
       }
     } finally {
       if (this.comparison === job) this.comparison = undefined;
     }
+    if (split) this.table.offer(check);
+    await this.openNextCheck();
   }
 
   // =====================================================================
@@ -810,6 +880,36 @@ export class Meeting {
     return this.cards(user).find((c): c is UnderstandingCheckCard => c.kind === "understanding_check" && c.checkId === checkId);
   }
 
+  // ---------- hooks for the agents' table ----------
+
+  private tableHost(): TableHost {
+    return {
+      goal: this.goal,
+      participants: () => this.participants,
+      now: () => this.now(),
+      nextId: (prefix) => this.nextId(prefix),
+      ownerContext: (user) => this.ownerContext(user),
+      privateNotes: (user) => this.privateTurns(user).flatMap((t) => (t.role === "user" && t.id ? [{ id: t.id, text: t.text }] : [])),
+      publicTexts: () => this.group.map((m) => m.text),
+      say: (text) => {
+        const line = this.addGroup("Moderator", "moderator", text);
+        this.log("mod_to_group", "moderator", "group", { text });
+        return line.id;
+      },
+      checkOpen: () => this.checkOpen(),
+      openBridgeCheck: async (thread) => {
+        const bridge = {
+          decision: thread.bridge!, question: "Does this wording work for you?",
+          options: ["Yes, this works for me", "It does not work for me", "Not sure yet"],
+        };
+        if (this.checkOpen()) this.queueCheck(bridge, thread.replaces);
+        else await this.openCheck(bridge, thread.replaces);
+      },
+      log: (type, from, to, data) => this.log(type, from, to, data),
+      llmLog: (who) => this.llmLog(who),
+    };
+  }
+
   // ---------- trace ----------
 
   private log(type: TraceEvent["type"], from: string, to: string, data: Record<string, unknown>): void {
@@ -833,7 +933,7 @@ export class Meeting {
 
 // Public delivery receipts are not new decision evidence.
 function isDecisionContext(message: GroupMessage): boolean {
-  return message.note?.type !== "angle_requested";
+  return message.note?.type !== "angle_requested" && message.note?.type !== "no_proposal";
 }
 
 /** How agents see attachments: names and kinds only, never the file contents. */
@@ -876,8 +976,10 @@ export function findPrivacyLeaks(meeting: Meeting): string[] {
     for (const ev of meeting.trace) {
       if (ev.type !== "llm_call" || ev.from === `agent:${user}`) continue;
       const input = String(ev.data.input ?? "");
+      // On the agents' table a member may approve a text for one reader: a reason for the Moderator, a change for everyone.
+      const consented = meeting.table.consented(user, ev.from);
       for (const s of secrets) {
-        if (input.includes(s)) leaks.push(`${ev.from} (${String(ev.data.prompt)}) received ${user}'s private text: "${s.slice(0, 50)}"`);
+        if (input.includes(s) && !consented.some((t) => t.includes(s))) leaks.push(`${ev.from} (${String(ev.data.prompt)}) received ${user}'s private text: "${s.slice(0, 50)}"`);
       }
     }
   }

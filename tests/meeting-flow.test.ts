@@ -9,6 +9,11 @@ import { enableFixtureModels, fixtureResponse } from "./mocks";
 
 enableFixtureModels();
 
+async function until(ok: () => boolean) {
+  for (let i = 0; i < 200 && !ok(); i++) await new Promise((resolve) => setTimeout(resolve, 2));
+  assert.ok(ok(), "timed out");
+}
+
 const cards = (m: Meeting, user: string): Card[] =>
   m.view(user).private.flatMap((item) => (item.type === "card" ? [item.card] : []));
 const openCheckCard = (m: Meeting, user: string) =>
@@ -47,14 +52,92 @@ test("a new decision replaces an open check that nobody has answered yet", async
   assert.match(m.group.at(-1)!.text, /^Replacing the earlier check\. Agreement check \(version 2\)/);
 });
 
-test("an unrelated decision does not replace a check that most members answered", async () => {
+test("a different version settled while most members answered replaces the check; old answers count for nothing", async () => {
   const m = room();
   await m.postGroupMessage("Minsu", "Let's go with a study app.");
   const check = m.check!;
   await m.answerCheck("Minsu", check.id, "Yes, as stated", true);
   await m.answerCheck("Jiwoo", check.id, "Yes, as stated", true);
   await m.postGroupMessage("Taeho", "Let's go with crowding prediction instead.");
-  assert.equal(m.check, check);
+  assert.equal(check.status, "cancelled");
+  assert.equal(m.check!.version, 2);
+  assert.match(m.check!.decision, /crowding prediction/);
+  assert.deepEqual(Object.keys(m.check!.answers), []);
+  await assert.rejects(m.answerCheck("Taeho", check.id, "Yes, as stated", true));
+  assert.equal(m.decisions.length, 0);
+});
+
+test("a message written while a check is still opening is not lost", async () => {
+  enableFixtureModels({ "personal/suggest_check_answer": 40 });
+  try {
+    const m = room();
+    const opening = m.postGroupMessage("Minsu", "Let's go with a Friday deadline for the draft.");
+    await until(() => m.check?.status === "collecting");
+    // The agents are still preparing their suggested answers when Taeho writes.
+    await m.postGroupMessage("Taeho", "Could we push it to Saturday morning instead?");
+    await opening;
+    assert.equal(m.check!.status, "cancelled");
+    assert.equal(m.group.at(-1)!.note?.type, "check_closed");
+  } finally {
+    enableFixtureModels();
+  }
+});
+
+test("a message being read when a proposal opens a check is read again against that check", async () => {
+  enableFixtureModels({ "moderator/detect_decision": 30 });
+  try {
+    const m = room();
+    await m.postGroupMessage("Minsu", "Let's go with a Thursday deadline for the draft.");
+    const first = m.check!;
+    // Minsu (host) revises the proposal; while it is framed, Taeho asks to change it in the chat.
+    const revision = m.reviseCheck("Minsu", first.id, "Submit the draft on Friday");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const change = m.postGroupMessage("Taeho", "Could we push it to Saturday morning instead?");
+    await Promise.all([revision, change]);
+    assert.equal(first.status, "cancelled");
+    assert.equal(m.check!.version, 2);
+    assert.equal(m.check!.status, "cancelled");
+    assert.match(m.group.at(-1)!.text, /stopped collecting answers/);
+  } finally {
+    enableFixtureModels();
+  }
+});
+
+test("a request to change the open proposal puts it on hold; going back to it needs everyone again", async () => {
+  const m = room();
+  await m.postGroupMessage("Minsu", "Let's go with a Friday deadline for the draft.");
+  const friday = m.check!;
+  await m.answerCheck("Minsu", friday.id, "Yes, as stated", true);
+  await m.answerCheck("Jiwoo", friday.id, "Yes, as stated", true);
+
+  // Taeho has not answered yet and asks to move it. The check closes without a result.
+  await m.postGroupMessage("Taeho", "Could we push it to Saturday morning instead?");
+  assert.equal(friday.status, "cancelled");
+  assert.equal(m.group.at(-1)!.note?.type, "check_closed");
+  assert.match(m.group.at(-1)!.text, /stopped collecting answers/);
+  assert.deepEqual(m.view("Minsu").discussing, { decision: friday.decision, status: "open" });
+  assert.equal(cards(m, "Taeho").find((c) => c.kind === "understanding_check")!.status, "closed");
+  // The two earlier answers can never complete the old version.
+  await assert.rejects(m.answerCheck("Taeho", friday.id, "Yes, as stated", true));
+  assert.equal(m.decisions.length, 0);
+
+  // The team keeps Friday after all: the same wording is checked again, as version 2.
+  await m.postGroupMessage("Minsu", "Let's go with a Friday deadline for the draft.");
+  const again = m.check!;
+  assert.equal(again.version, 2);
+  assert.equal(again.status, "collecting");
+  assert.equal(m.decisions.length, 0);
+  for (const user of ["Minsu", "Jiwoo", "Taeho"]) await m.answerCheck(user, again.id, "Yes, as stated", true);
+  assert.equal(again.status, "aligned");
+  assert.equal(m.decisions.length, 1);
+  assert.equal(m.view("Minsu").discussing, null);
+});
+
+test("Check agreement now with nothing to check says so", async () => {
+  const m = room();
+  await m.startCheck("Jiwoo");
+  assert.equal(m.check, null);
+  assert.equal(m.group.at(-1)?.note?.type, "no_proposal");
 });
 
 test("a public amendment after two approvals requires three fresh approvals of the revised wording", async () => {

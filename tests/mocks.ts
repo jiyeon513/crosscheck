@@ -7,16 +7,24 @@ import type { CompareInput, DetectDecisionInput, MissingAngleInput } from "../ag
 import type { AngleReplyInput, ChatInput, CheckSuggestInput, ReactInput } from "../agents/personal";
 import type { AngleReply, ChatResult, CheckSuggestion, Comparison, DecisionDetection, MissingAngle, PrivateTurn, ReactResult } from "../agents/protocol";
 import { useFixtureGenerator } from "../agents/llm";
+import { tableFixture } from "./table-mocks";
+import { criticFixture } from "./critic-mocks";
 
 const userTexts = (turns: PrivateTurn[]) => turns.filter((t) => t.role === "user").map((t) => t.text);
 
 // These fixtures exercise the same response validation as live calls.
-export function enableFixtureModels() {
-  useFixtureGenerator(fixtureResponse);
+// delays: milliseconds per prompt, to test what happens while a model call is still running.
+export function enableFixtureModels(delays: Record<string, number> = {}) {
+  useFixtureGenerator(async (prompt, context) => {
+    if (delays[prompt]) await new Promise((resolve) => setTimeout(resolve, delays[prompt]));
+    return fixtureResponse(prompt, context);
+  });
 }
 
 /** The fixture answer for one prompt. Tests can wrap it to override a single prompt. */
 export function fixtureResponse(prompt: string, context: object): unknown {
+  if (prompt.startsWith("personal/table_") || prompt === "moderator/propose_bridge") return tableFixture(prompt, context);
+  if (prompt.startsWith("moderator/critic_")) return criticFixture(prompt, context);
   switch (prompt) {
     case "moderator/find_missing_angle": return findMissingAngle(context as MissingAngleInput);
     case "moderator/detect_decision": return detectDecision(context as DetectDecisionInput);
@@ -67,11 +75,17 @@ export function findMissingAngle(input: MissingAngleInput): MissingAngle {
 const DECISION_RE =
   /\b(let'?s (go with|just do|do|pick|choose)|we('ll| will) go with|so we('re| are) (doing|going with)|we decided|it'?s decided)\b|로 가자|로 하자|로 정하자|으로 결정/i;
 
+const CHANGE_RE = /\b(could we|can we|maybe we should)\b.*\b(instead|move|push|change)\b|미뤄도|바꿀 수/i;
+
 export function detectDecision(input: DetectDecisionInput): DecisionDetection {
   const users = input.group.filter((m) => m.kind !== "moderator");
   const newest = users[users.length - 1];
   const none: DecisionDetection = { is_decision: false, decision: "", ambiguity: "", question: "", options: [], reason: "mock: no decision phrase" };
   if (!newest) return none;
+  // Someone wants to change the proposal being checked, without settling a new version.
+  if (input.openProposal && input.trigger !== "host_request" && !DECISION_RE.test(newest.text) && CHANGE_RE.test(newest.text)) {
+    return { ...none, open_challenged: true, reason: "mock: wants to change the open proposal" };
+  }
   if (input.trigger !== "host_request" && !DECISION_RE.test(newest.text)) {
     return { ...none, invitation_quote: newest.text.match(/what (else|other) (could|can|campus).*$/i)?.[0] ?? "" };
   }
@@ -84,8 +98,18 @@ export function detectDecision(input: DetectDecisionInput): DecisionDetection {
     options: aboutScope
       ? ["Library and cafeteria only", "The whole campus", "Not sure yet"]
       : ["Yes, as stated", "I understood it differently", "Not sure yet"],
+    replaces_open: Boolean(input.openProposal) && aboutSameQuestion(input.openProposal!, newest.text),
     reason: "mock: decision phrase found",
   };
+}
+
+// "instead", or a content word shared with the open proposal, means the same question.
+const COMMON = new Set(["let's", "lets", "going", "proposed", "chat", "with", "then", "this", "that", "there"]);
+function aboutSameQuestion(open: string, text: string): boolean {
+  if (/\binstead\b|말고/i.test(text)) return true;
+  const words = (s: string) => new Set(s.toLowerCase().split(/[^\p{L}\p{N}']+/u).filter((w) => w.length >= 5 && !COMMON.has(w)));
+  const a = words(open);
+  return [...words(text)].some((w) => a.has(w));
 }
 
 export function compareUnderstanding(input: CompareInput): Comparison {

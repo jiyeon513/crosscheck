@@ -1,0 +1,97 @@
+[
+  {
+    "id": "compare_generic_split",
+    "fn": "moderator.compareUnderstanding",
+    "note": "A split on the generic options. The follow-up should invite what is different, not repeat 'as stated / differently'.",
+    "mock": "skip",
+    "input": {
+      "decision": "We will build an app that predicts how crowded places on campus are.",
+      "question": "Is this how you understood the decision?",
+      "labels": ["Yes, as stated", "I understood it differently", "Yes, as stated"],
+      "concerns": []
+    },
+    "expect": {
+      "aligned": false,
+      "groups": { "length": 2 },
+      "anonymous_question": { "includes_any": ["which part", "what part", "which detail", "what detail", "what do you picture", "how do you picture", "what would you", "which word"], "not_includes_any": ["as stated", "two of", "2 of", "majority", "most of", "one of you"], "max_words": 45 }
+    }
+  },
+  {
+    "id": "compare_own_words_same_as_option",
+    "fn": "moderator.compareUnderstanding",
+    "note": "Own words that mean the same as an option belong with it.",
+    "mock": "skip",
+    "input": {
+      "decision": "We will build an app that predicts how crowded places on campus are.",
+      "question": "Which places should the app cover?",
+      "labels": ["Library and cafeteria only", "just the cafeteria and the library", "Library and cafeteria only"],
+      "concerns": []
+    },
+    "expect": { "aligned": true, "groups": { "length": 1 }, "final_statement": { "includes_all": ["library", "cafeteria"] } }
+  },
+  {
+    "id": "compare_own_words_narrower",
+    "fn": "moderator.compareUnderstanding",
+    "note": "A narrower reading in own words is a different reading.",
+    "mock": "skip",
+    "input": {
+      "decision": "We will build an app that predicts how crowded places on campus are.",
+      "question": "Which places should the app cover?",
+      "labels": ["Library and cafeteria only", "Only the library at first", "Library and cafeteria only"],
+      "concerns": []
+    },
+    "expect": { "aligned": false, "groups": { "length": 2 }, "anonymous_question": { "includes_any": ["library"], "not_includes_any": ["two of", "2 of", "majority", "most of"] } }
+  },
+  {
+    "id": "compare_unsure_beside_one_reading",
+    "fn": "moderator.compareUnderstanding",
+    "note": "One reading plus 'not sure': ask whether that reading works or what is unclear, without counts.",
+    "mock": "skip",
+    "input": {
+      "decision": "Students can compare cafeteria menus, prices, and wait times to decide where to eat.",
+      "question": "What do you picture for wait times?",
+      "labels": ["Typical wait times by time of day", "Not sure yet", "Typical wait times by time of day"],
+      "concerns": []
+    },
+    "expect": { "aligned": false, "groups": { "length": 2 }, "anonymous_question": { "includes_any": ["typical", "usual"], "not_includes_any": ["two of", "2 of", "majority", "most of", "one person", "someone is not sure"] } }
+  },
+  {
+    "id": "compare_korean",
+    "fn": "moderator.compareUnderstanding",
+    "note": "Korean answers: Korean follow-up offering both readings.",
+    "mock": "skip",
+    "input": {
+      "decision": "캠퍼스 혼잡도 예측 앱을 만든다.",
+      "question": "앱이 어떤 장소를 다뤄야 할까요?",
+      "labels": ["학생식당과 도서관만", "캠퍼스 전체", "학생식당과 도서관만"],
+      "concerns": []
+    },
+    "expect": { "aligned": false, "groups": { "length": 2 }, "anonymous_question": { "includes_each": [["식당", "도서관"], ["전체"]] } }
+  },
+  {
+    "id": "compare_compatible_wordings",
+    "fn": "moderator.compareUnderstanding",
+    "note": "Three wordings of the same live reading.",
+    "mock": "skip",
+    "input": {
+      "decision": "Students can compare cafeteria menus, prices, and wait times to decide where to eat.",
+      "question": "What do you picture for wait times?",
+      "labels": ["Live wait times", "How long the wait is right now", "Real-time wait estimate"],
+      "concerns": []
+    },
+    "expect": { "aligned": true, "groups": { "length": 1 } }
+  },
+  {
+    "id": "compare_vague_between_specific",
+    "fn": "moderator.compareUnderstanding",
+    "note": "'Friday noon' and 'Friday midnight' differ; a bare 'Friday' does not settle it.",
+    "mock": "skip",
+    "input": {
+      "decision": "We will submit the proposal on Friday.",
+      "question": "When on Friday do we submit?",
+      "labels": ["Friday noon", "Friday midnight", "Friday noon"],
+      "concerns": []
+    },
+    "expect": { "aligned": false, "groups": { "length": 2 }, "anonymous_question": { "includes_all": ["noon", "midnight"] } }
+  }
+]

@@ -1,0 +1,612 @@
+[
+  {
+    "id": "hold_push_to_saturday",
+    "fn": "moderator.detectDecision",
+    "note": "A request to change the open proposal, without settling a new version: the check goes on hold.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will run the survey on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's run the survey on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will run the survey on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "Could we push it to Saturday instead? Friday is packed for me."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": true
+    }
+  },
+  {
+    "id": "hold_not_sure_tool",
+    "fn": "moderator.detectDecision",
+    "note": "Doubt about part of the open proposal: on hold.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will build the survey in Qualtrics.",
+      "group": [
+        {
+          "author": "Soyeon",
+          "text": "Let's build the survey in Qualtrics."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will build the survey in Qualtrics.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "Wait, I'm not sure about Qualtrics. Do we even have a license?"
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": true
+    }
+  },
+  {
+    "id": "no_hold_meaning_question",
+    "fn": "moderator.detectDecision",
+    "note": "Asking what the proposal means is not a challenge: the check keeps collecting answers.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will run the survey on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's run the survey on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will run the survey on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "Does Friday mean the morning or the whole day?"
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": false
+    }
+  },
+  {
+    "id": "no_hold_agreement",
+    "fn": "moderator.detectDecision",
+    "note": "Agreeing with the open proposal is not a challenge.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will run the survey on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's run the survey on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will run the survey on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Soyeon",
+          "text": "Friday works for me."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": false
+    }
+  },
+  {
+    "id": "no_hold_settled_revision",
+    "fn": "moderator.detectDecision",
+    "note": "Settling the change is a revision of the open check, not a hold.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will run the survey on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's run the survey on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will run the survey on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "Could we push it to Saturday instead?"
+        },
+        {
+          "author": "Minsu",
+          "text": "OK, let's move the survey to Saturday then."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "open_challenged": false,
+      "decision": {
+        "includes_any": [
+          "saturday"
+        ]
+      },
+      "replaces_open": true
+    }
+  },
+  {
+    "id": "no_hold_tight_but_fine",
+    "fn": "moderator.detectDecision",
+    "note": "Mild doubt that still accepts is not a change request.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will submit the draft on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's submit the draft on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will submit the draft on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "Friday is a bit tight for me, but fine."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": false
+    }
+  },
+  {
+    "id": "no_hold_joke",
+    "fn": "moderator.detectDecision",
+    "note": "A joke about the proposal is not a change request.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will submit the draft on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's submit the draft on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will submit the draft on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Soyeon",
+          "text": "Haha, Friday again. Our weekends are doomed 😅"
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": false
+    }
+  },
+  {
+    "id": "no_hold_side_remark",
+    "fn": "moderator.detectDecision",
+    "note": "A side remark while answering is not a change request.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will submit the draft on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's submit the draft on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will submit the draft on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "I'll answer in a minute, just grabbing coffee."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": false
+    }
+  },
+  {
+    "id": "no_hold_own_calendar",
+    "fn": "moderator.detectDecision",
+    "note": "Uncertainty about one's own calendar is not a request to change the proposal.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will submit the draft on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's submit the draft on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will submit the draft on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "Not sure yet, I need to check my calendar first."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": false
+    }
+  },
+  {
+    "id": "no_hold_preference_accepts",
+    "fn": "moderator.detectDecision",
+    "note": "A preference that still accepts the proposal is not a change request.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will submit the draft on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's submit the draft on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will submit the draft on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Soyeon",
+          "text": "I'd slightly prefer Saturday, but Friday is OK."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": false
+    }
+  },
+  {
+    "id": "no_hold_unrelated_question",
+    "fn": "moderator.detectDecision",
+    "note": "An unrelated question is not about the open proposal.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will submit the draft on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's submit the draft on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will submit the draft on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Soyeon",
+          "text": "Did everyone see the menu photos I sent earlier?"
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": false
+    }
+  },
+  {
+    "id": "no_hold_korean_tight",
+    "fn": "moderator.detectDecision",
+    "note": "Korean: 'a bit tight but OK' is not a change request.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "금요일에 초안을 제출한다.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "금요일에 초안 제출하자."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"금요일에 초안을 제출한다.\" Please answer privately in your own window."
+        },
+        {
+          "author": "태호",
+          "text": "금요일 좀 빠듯하긴 한데 괜찮아."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": false
+    }
+  },
+  {
+    "id": "hold_rethink",
+    "fn": "moderator.detectDecision",
+    "note": "'Can we rethink it?' with a reason is a request to change the open proposal.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will submit the draft on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's submit the draft on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will submit the draft on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "Hmm, can we rethink Friday? It clashes with the midterm."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": true
+    }
+  },
+  {
+    "id": "hold_method_doubt",
+    "fn": "moderator.detectDecision",
+    "note": "Doubting the proposal itself puts it on hold.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will run a survey with 30 students.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's run a survey with 30 students."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will run a survey with 30 students.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "I don't think a survey is the right method at all, honestly."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": true
+    }
+  },
+  {
+    "id": "hold_korean_push",
+    "fn": "moderator.detectDecision",
+    "note": "Korean: 'could we push it to Saturday?' is a change request.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "금요일에 초안을 제출한다.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "금요일에 초안 제출하자."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"금요일에 초안을 제출한다.\" Please answer privately in your own window."
+        },
+        {
+          "author": "태호",
+          "text": "금요일 말고 토요일로 미뤄도 될까?"
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": false,
+      "open_challenged": true
+    }
+  },
+  {
+    "id": "open_separate_tool",
+    "fn": "moderator.detectDecision",
+    "note": "A decision about something else while a deadline is checked: not the same question.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will submit the draft on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's submit the draft on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will submit the draft on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "Also, let's use Figma for the slides."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "replaces_open": false
+    }
+  },
+  {
+    "id": "open_separate_owner",
+    "fn": "moderator.detectDecision",
+    "note": "Who does the slides is separate from the deadline being checked.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will submit the draft on Friday.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's submit the draft on Friday."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will submit the draft on Friday.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Soyeon",
+          "text": "OK, and let's have Taeho do the slides."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "replaces_open": false
+    }
+  },
+  {
+    "id": "open_same_alternative",
+    "fn": "moderator.detectDecision",
+    "note": "A different choice for the same question replaces the open check.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the course project",
+      "trigger": "new_message",
+      "openProposal": "We will build a study group matching app.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "Let's go with a study group matching app."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"We will build a study group matching app.\" Please answer privately in your own window."
+        },
+        {
+          "author": "Taeho",
+          "text": "Actually, let's go with crowding prediction instead."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "replaces_open": true
+    }
+  },
+  {
+    "id": "open_same_alternative_korean",
+    "fn": "moderator.detectDecision",
+    "note": "Korean: a different choice for the same question.",
+    "mock": "skip",
+    "input": {
+      "goal": "수업 프로젝트 주제 정하기",
+      "trigger": "new_message",
+      "openProposal": "학생식당 메뉴 비교 앱을 만든다.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "학생식당 메뉴 비교 앱으로 가자."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"학생식당 메뉴 비교 앱을 만든다.\" Please answer privately in your own window."
+        },
+        {
+          "author": "태호",
+          "text": "아니면 메뉴 앱 말고 혼잡도 예측 앱으로 가자."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "replaces_open": true
+    }
+  },
+  {
+    "id": "open_separate_korean",
+    "fn": "moderator.detectDecision",
+    "note": "Korean: the slide tool is separate from the deadline being checked.",
+    "mock": "skip",
+    "input": {
+      "goal": "수업 프로젝트 계획",
+      "trigger": "new_message",
+      "openProposal": "금요일에 초안을 제출한다.",
+      "group": [
+        {
+          "author": "Minsu",
+          "text": "금요일에 초안 제출하자."
+        },
+        {
+          "author": "Moderator",
+          "kind": "moderator",
+          "text": "Agreement check: \"금요일에 초안을 제출한다.\" Please answer privately in your own window."
+        },
+        {
+          "author": "태호",
+          "text": "그리고 슬라이드는 피그마로 만들자."
+        }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "replaces_open": false
+    }
+  }
+]

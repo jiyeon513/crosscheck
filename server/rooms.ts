@@ -156,6 +156,11 @@ export async function roomAction(name: string, key: string, action: string, body
       return run(room, meeting.startCheck(name));
     case "POST check/compare":
       return run(room, meeting.compareNow(name));
+    case "POST table/start":
+      return run(room, meeting.table.start(name, text(body.threadId)));
+    case "POST table/speak":
+      if (typeof body.send !== "boolean") throw new HttpError(400, "Choose whether to send it");
+      return run(room, meeting.table.answer(name, text(body.draftId), body.send, text(body.text)));
     case "POST reopen":
       if (typeof body.reopen !== "boolean") throw new HttpError(400, "Choose whether to revisit the decision");
       meeting.answerRevisit(name, text(body.recordId), body.reopen);

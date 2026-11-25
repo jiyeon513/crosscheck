@@ -1,0 +1,190 @@
+[
+  {
+    "id": "frame_places_two_readings",
+    "fn": "moderator.detectDecision",
+    "note": "Two readings of 'places on campus' are in the chat. The check should ask which places, not about the data source.",
+    "mock": "skip",
+    "input": {
+      "goal": "Propose one campus app idea for our class project by tonight",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "What if we build an app that predicts how crowded places on campus are?" },
+        { "author": "Taeho", "text": "Nice, the Wi-Fi data could work for that." },
+        { "author": "Soyeon", "text": "Sounds useful. The cafeteria and the library are where people actually wait." },
+        { "author": "Taeho", "text": "The Wi-Fi counts exist for every building though, so we could cover everything." },
+        { "author": "Minsu", "text": "OK, let's go with crowding prediction." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "question": { "not_includes_any": ["wi-fi", "data source", "part of the decision", "commit"] },
+      "options": { "min_length": 3, "includes_each": [["cafeteria", "library"], ["campus", "every", "all", "building"]] }
+    }
+  },
+  {
+    "id": "frame_places_hinted",
+    "fn": "moderator.detectDecision",
+    "note": "Only a hint. Ask about what the vague words mean, never whether something was 'part of the decision'.",
+    "mock": "skip",
+    "input": {
+      "goal": "Propose one campus app idea for our class project by tonight",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "What if we build an app that predicts how crowded places on campus are?" },
+        { "author": "Taeho", "text": "Nice, the Wi-Fi data could work for that." },
+        { "author": "Soyeon", "text": "Sounds useful, people hate waiting in line." },
+        { "author": "Minsu", "text": "OK, let's go with crowding prediction." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "question": { "not_includes_any": ["part of the decision", "commit to", "was it decided", "is using"] },
+      "options": { "min_length": 3 }
+    }
+  },
+  {
+    "id": "frame_wait_times_demo",
+    "fn": "moderator.detectDecision",
+    "note": "The demo's T3 moment: 'wait times' can mean the line right now or the usual wait at that time of day.",
+    "mock": "skip",
+    "input": {
+      "goal": "Propose a campus app idea by tonight",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "We've got menus and prices. What else could we show students to help them decide where to eat?" },
+        { "author": "Taeho", "text": "What about putting wait times next to the menus? If both places have something I like, I'd go for the shorter line." },
+        { "author": "Soyeon", "text": "Yes! I'd check it before leaving class." },
+        { "author": "Minsu", "text": "Okay, I think we've got our idea. Let's propose that students can compare cafeteria menus, prices, and wait times to decide where to eat." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "question": { "includes_any": ["wait", "line"] },
+      "options": { "min_length": 3, "includes_each": [["live", "right now", "current", "real-time", "real time", "now"], ["usual", "typical", "average", "busy", "time of day", "by time"]] }
+    }
+  },
+  {
+    "id": "frame_deliverable_not_tool",
+    "fn": "moderator.detectDecision",
+    "note": "The tool was agreed in passing; what the prototype is (clickable mockup or working app) is the real question.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the prototype for the course demo",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "For the prototype we could use Figma." },
+        { "author": "Soyeon", "text": "Sure, Figma is fine." },
+        { "author": "Taeho", "text": "I could also hook it up to real menu data so it actually works." },
+        { "author": "Soyeon", "text": "A clickable mockup is probably enough for Friday though." },
+        { "author": "Minsu", "text": "Let's make a prototype for Friday's demo." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "options": { "min_length": 3, "includes_each": [["click", "mockup", "mock-up", "figma", "design"], ["real data", "working", "works", "functional", "real menu", "live data"]] }
+    }
+  },
+  {
+    "id": "frame_deadline_time",
+    "fn": "moderator.detectDecision",
+    "note": "'Friday' was said with two different times.",
+    "mock": "skip",
+    "input": {
+      "goal": "Submit the project proposal",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Soyeon", "text": "We should submit before the weekend." },
+        { "author": "Taeho", "text": "Friday works, the portal closes at midnight." },
+        { "author": "Soyeon", "text": "I'd rather we finish by Friday noon so we can check it together." },
+        { "author": "Minsu", "text": "Let's submit on Friday then." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "options": { "min_length": 3, "includes_each": [["noon", "12", "morning", "midday"], ["midnight", "night", "end of", "11", "evening"]] }
+    }
+  },
+  {
+    "id": "frame_owner",
+    "fn": "moderator.detectDecision",
+    "note": "Who does the slides is unclear; owner questions may use the names already in the chat.",
+    "mock": "skip",
+    "input": {
+      "goal": "Prepare the final presentation",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "We still need slides and a demo video." },
+        { "author": "Taeho", "text": "I can do the slides if Minsu does the video." },
+        { "author": "Minsu", "text": "I thought Soyeon wanted the slides?" },
+        { "author": "Soyeon", "text": "Either is fine with me." },
+        { "author": "Minsu", "text": "OK, let's split the slides and the video like that." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "question": { "includes_any": ["who", "slides"] },
+      "options": { "min_length": 3, "includes_each": [["taeho"], ["soyeon"]] }
+    }
+  },
+  {
+    "id": "frame_quantity",
+    "fn": "moderator.detectDecision",
+    "note": "'Some students' was said as five friends and as a survey of fifty.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan user research before the final pitch",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Minsu", "text": "We need user feedback before the final pitch." },
+        { "author": "Soyeon", "text": "I can ask five friends from my dorm." },
+        { "author": "Taeho", "text": "A proper survey of fifty students would look better in the report." },
+        { "author": "Minsu", "text": "Let's interview some students next week." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "options": { "min_length": 3, "includes_each": [["five", "5", "few", "friends", "small"], ["fifty", "50", "survey", "large"]] }
+    }
+  },
+  {
+    "id": "frame_concrete_generic",
+    "fn": "moderator.detectDecision",
+    "note": "Everything is stated. Do not invent an ambiguity: the generic question, or at most which Tuesday is meant.",
+    "mock": "skip",
+    "input": {
+      "goal": "Find a time to meet",
+      "trigger": "new_message",
+      "group": [
+        { "author": "Soyeon", "text": "Tuesday works for me, 5:00 PM?" },
+        { "author": "Taeho", "text": "5:00 is fine, at the main gate?" },
+        { "author": "Soyeon", "text": "Main gate works." },
+        { "author": "Minsu", "text": "Great, let's meet Tuesday at 5:00 PM at the main gate." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "options": { "includes_any": ["as stated", "this coming", "next tuesday", "this tuesday"] }
+    }
+  },
+  {
+    "id": "frame_places_korean",
+    "fn": "moderator.detectDecision",
+    "note": "The scope split in Korean: Korean question and options, both readings.",
+    "mock": "skip",
+    "input": {
+      "goal": "오늘 밤까지 캠퍼스 앱 아이디어 하나 제안하기",
+      "trigger": "new_message",
+      "group": [
+        { "author": "민수", "text": "캠퍼스에서 어디가 얼마나 붐비는지 예측하는 앱 어때?" },
+        { "author": "태호", "text": "좋아, 와이파이 접속 데이터로 할 수 있을 것 같아." },
+        { "author": "소연", "text": "사람들이 실제로 줄 서는 곳은 학생식당이랑 도서관이야." },
+        { "author": "태호", "text": "와이파이 데이터는 모든 건물에 있으니까 캠퍼스 전체도 가능해." },
+        { "author": "민수", "text": "좋아, 혼잡도 예측으로 가자." }
+      ]
+    },
+    "expect": {
+      "is_decision": true,
+      "options": { "min_length": 3, "includes_each": [["식당", "도서관"], ["전체", "모든"]], "not_includes_any": ["not sure"] }
+    }
+  }
+]

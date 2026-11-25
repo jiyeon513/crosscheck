@@ -38,14 +38,21 @@ A decision "Under discussion" is one the team is talking about again (their answ
 
 When the newest message questions, disagrees with or wants to change one of the decisions in "Already agreed in this meeting" without itself settling a new version ("Actually, I'm not sure the cafeteria works", "Can we rethink the deadline?"), set "challenged" to that decision's number and "is_decision" to false. Otherwise "challenged" is 0.
 
+When there is an "Open check" and the newest message questions it or wants to change it without itself settling a new version ("Could we push it to Saturday instead?", "Wait, I'm not sure about Qualtrics"), set "open_challenged" to true and "is_decision" to false. Asking what the proposal means, or agreeing with it, is not a challenge. Neither is saying you are not sure yet about your own answer or availability ("I need to check my calendar first"). Otherwise "open_challenged" is false.
+
+When the newest message is a decision and there is an "Open check", set "replaces_open" to true if it decides the same question as the open proposal (a different choice for it, or a change to it), and false if it settles something separate (for example a tool for the slides while a deadline is being checked). Leave it false when there is no open check.
+
 When it is a decision, prepare a private check for the members. People often agree to the same words while picturing different things, so find where that could happen here.
-- "decision": one neutral sentence that restates what was decided, in the team's own words. If the team gives an exact sentence to submit, use that sentence verbatim. Add nothing that was not said.
-- "ambiguity": the aspect most likely to be understood differently, in 1 to 4 words (for example scope, deliverable, deadline, owner).
-- "question": one short, neutral question about that one aspect only. Do not combine two topics.
-- "options": 2 or 3 concrete readings a member could have, each 6 words or fewer and clearly different, taken from what was actually said in the chat. Then add "Not sure yet". If the chat says nothing about the ambiguous aspect, use the generic question below instead of inventing readings.
+- "decision": one neutral sentence that restates what was decided, in the team's own words. If the team gives an exact sentence to submit, use that sentence verbatim. Add nothing that was not said. When the newest message refers back ("like that", "that one") and the chat offered more than one version, do not pick one: keep the decision as open as the team left it, and make that open part the ambiguity.
+- "ambiguity": the one aspect most likely to be understood differently, in 1 to 4 words (for example scope, what is shown, deliverable, deadline, owner, amount). Choose it in this order:
+  1. a word in the decision that teammates described differently in the chat (for example "the cafeteria and the library" in one message and "every building" in another);
+  2. otherwise a vague word in the decision that the team must make concrete to act on it: which places, what exactly is shown, how many, when exactly, who does which part;
+  3. what the team will deliver or do comes before a tool or method that was mentioned in passing.
+- "question": one short, neutral question about what that aspect means. Do not combine two topics. Never ask whether something is "part of the decision" or whether the team "committed" to it.
+- "options": 2 or 3 readings of that one aspect, each a concrete answer to the question, 6 words or fewer and clearly different from each other. The readings must differ in what the team would build or do (for example now versus usually), not only in wording or units. Use the readings from the chat. If the chat gives only one, add the natural other reading of the same words (for example "wait times": the line right now, or the usual wait at that time of day; "some students": a few friends, or a larger survey). Never offer a single reading, and never "not specified". Then add "Not sure yet", in the language of the chat.
 - Write in the language most of the group chat is written in, not just the newest message's language.
-- Do not name participants, except when the ambiguity is who owns a task and the chat already named them.
-- If nothing is realistically ambiguous, ask "Is this how you understood the decision?" with the options "Yes, as stated", "I understood it differently", "Not sure yet".
+- Do not name participants, except when the ambiguity is who does which part and the chat already named them; then the options may name them (for example "Taeho does the slides").
+- Use the generic question only when the decision already states every concrete detail (who, what, which, when, how much) and nobody described it differently: ask "Is this how you understood the decision?" with the options "Yes, as stated", "I understood it differently", "Not sure yet".
 
 Reply with one JSON object and nothing else:
 {
@@ -57,6 +64,8 @@ Reply with one JSON object and nothing else:
   "question": "",
   "options": [],
   "challenged": 0,
+  "open_challenged": false,
+  "replaces_open": false,
   "reason": "one short sentence for the developers"
 }
 When "is_decision" is false, leave decision, ambiguity, question and options empty. Before returning a revision, verify that revision_quote communicates a choice on behalf of the team. If it merely tells others what the speaker personally thought the proposal meant, return is_decision=false and clear revision_quote.

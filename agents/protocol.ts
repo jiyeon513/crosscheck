@@ -1,6 +1,8 @@
 // The contract between the moderator, the personal agents, and the web UI.
 // If you change a type here, tell the other team first (docs/api.md mirrors this file).
 
+import type { ThreadView } from "./table-protocol";
+
 export type Stage = "ideation" | "agreement" | "done";
 
 // ---------- group chat ----------
@@ -17,6 +19,8 @@ export type ModeratorNote =
   | { type: "angle_requested" }
   | { type: "check_opened"; version: number }
   | { type: "check_closed" }
+  | { type: "no_proposal" }
+  | { type: "check_queued" }
   /** The Moderator asks whether to revisit an agreed decision. Members answer with buttons. */
   | { type: "reopen_prompt"; recordId: string; decision: string }
   | { type: "reopen_result"; reopened: boolean }
@@ -121,6 +125,10 @@ export type DecisionDetection = {
   reason: string;
   /** 1-based number of an already agreed decision that the newest message questions or wants to change; 0 if none. */
   challenged?: number;
+  /** The newest message questions or wants to change the proposal that is being checked now, without settling a new version. */
+  open_challenged?: boolean;
+  /** While a check is open: this decision is about the same question as the open proposal (not something separate). */
+  replaces_open?: boolean;
 };
 
 export type Comparison = {
@@ -213,6 +221,8 @@ export type UserView = {
   decisions: DecisionRecord[];
   /** A decision the team is talking about again, if any. */
   discussing: Discussion | null;
+  /** The agents' table, under code names (agents/table-protocol.ts). */
+  table: ThreadView[];
   llm: { mode: "mock" | "live" | "unconfigured"; model: string };
 };
 
