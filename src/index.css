@@ -2181,11 +2181,6 @@ button.schedule-row.past:hover {
   font-size: 9px;
 }
 
-.pcard.concern .pcard-toggle {
-  border-color: var(--line-strong);
-  color: var(--ink-2);
-}
-
 .pcard-ask {
   justify-self: start;
   padding: 0;

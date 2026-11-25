@@ -262,19 +262,6 @@ export async function angleReply(input: AngleReplyInput, log?: Log, generate: Ge
   return { has_view: true, label: input.angle, ...item };
 }
 
-/** The card's explanation is two short sentences at most. A longer one keeps only its first two sentences. */
-export const WHY_MAX_CHARS = 200;
-export function shortWhy(text: string): string {
-  const why = text.trim().replace(/\s+/g, " ");
-  if (why.length <= WHY_MAX_CHARS) return why;
-  const sentences = why.match(/[^.!?。？！]+[.!?。？！]+["'”’)]*\s*/g) ?? [why];
-  const kept = sentences.slice(0, 2).join("").trim();
-  // Keep the closing question if the model put it last.
-  const question = sentences.at(-1)!.trim();
-  const short = /[?？]$/.test(question) && !kept.endsWith(question) ? `${sentences[0].trim()} ${question}` : kept;
-  return short.length <= WHY_MAX_CHARS * 1.5 ? short : short.slice(0, WHY_MAX_CHARS).replace(/\s+\S*$/, "") + "…";
-}
-
 export async function suggestCheckAnswer(input: CheckSuggestInput, log?: Log, generate: Generate = callPersonalJSON): Promise<CheckSuggestion & { evidenceIds: string[] }> {
   return withRetry("suggest_check_answer", async () => {
     const data = await generate("personal/suggest_check_answer", {
@@ -287,6 +274,6 @@ export async function suggestCheckAnswer(input: CheckSuggestInput, log?: Log, ge
     // An unsupported guess is dropped, not fatal: the member still gets the question.
     const choice = data.suggested_option;
     const supported = nonblank(choice) && input.options.includes(choice) && evidence.length > 0;
-    return { suggested_option: supported ? choice : null, why: shortWhy(data.why), evidenceIds: supported ? evidence.map(e => e.id) : [] };
+    return { suggested_option: supported ? choice : null, why: data.why.trim(), evidenceIds: supported ? evidence.map(e => e.id) : [] };
   });
 }
