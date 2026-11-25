@@ -131,3 +131,14 @@ test("missing or malformed live output never becomes a scripted private answer",
   await assert.rejects(personal.chat(input, undefined, returns({ reply: "" })));
   await assert.rejects(personal.chat(input, undefined, async () => { throw new Error("Provider unavailable"); }), /Provider unavailable/);
 });
+
+test("the agreement-check explanation stays short", () => {
+  const long = "The decision text says only that the draft is due Friday, but that leaves unresolved which Friday is meant. " +
+    "It also does not say what time or cutoff is intended, for example the end of the business day or midnight. " +
+    "Different teammates could picture different deadlines. Which Friday and time do you have in mind?";
+  const short = personal.shortWhy(long);
+  assert.ok(short.length < long.length);
+  assert.match(short, /^The decision text says only/);
+  assert.match(short, /Which Friday and time do you have in mind\?$/);
+  assert.equal(personal.shortWhy("Which Friday do you mean?"), "Which Friday do you mean?");
+});

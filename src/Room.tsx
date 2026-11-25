@@ -25,7 +25,7 @@ import PrivateWindow, { type AgentReference } from "./PrivateWindow";
 import { Avatar } from "./ui";
 import { useRoom } from "./useRoom";
 
-type Target = "team" | "agent" | "log";
+type Target = "team" | "agent";
 
 /** Closed by default; the "Decision log" button in the team chat header opens it. */
 const LOG_OPEN_KEY = "crosscheck.logOpen.v2";
@@ -128,16 +128,6 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
     }
   }
 
-  /** A dropped message becomes a proposal; the Moderator opens an agreement check on it. */
-  async function propose(text: string) {
-    try {
-      await room.act("propose", { text });
-      setNotice("");
-    } catch (caught) {
-      setNotice(caught instanceof Error ? caught.message : "Could not propose that.");
-    }
-  }
-
   /** The Moderator offered an angle to everyone; think about it privately with the agent. */
   async function explore(line: GroupMessage) {
     setExploring(line.id);
@@ -179,10 +169,6 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
     setDragging(null);
     clearCarried();
     if (!payload) return;
-    if (target === "log") {
-      void propose(payload.text);
-      return;
-    }
     if (target === "team") {
       setTeamQuote({ author: payload.author, text: payload.text });
       return;
@@ -249,16 +235,13 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
                   "log-toggle",
                   logOpen ? "on" : "",
                   flash ? "flash" : "",
-                  !logOpen && dragging !== null ? "drop-ready" : "",
-                  !logOpen && over === "log" ? "over" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
                 type="button"
                 onClick={toggleLog}
                 aria-expanded={logOpen}
-                title={logOpen ? "Hide the decision log" : "Show the decision log (drop a message here to propose it)"}
-                {...(!logOpen ? dropZone("log") : {})}
+                title={logOpen ? "Hide the decision log" : "Show the decision log"}
               >
                 <span className="log-toggle-icon" aria-hidden="true">
                   ✓
@@ -357,9 +340,6 @@ export default function Room({ code, me, onBack }: { code: string; me: string; o
             await loadGroup();
           }}
           onOpenGroup={onBack}
-          zone={dropZone("log")}
-          over={over === "log"}
-          dragging={dragging !== null}
           flash={flash}
           agreement={view?.agreement ?? null}
           discussing={view?.discussing ?? null}

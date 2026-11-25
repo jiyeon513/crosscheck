@@ -89,16 +89,20 @@ test("accounts, groups, a meeting room with agents, an agreed decision and its l
     await act("Jiwoo", "group", { text: "Yes!", quote: { author: "Anonymous", text: "Wi-Fi counts could measure crowding." } });
     assert.ok((await view("Minsu")).group.some((m: Json) => m.quote?.author === "Anonymous"));
 
-    // Jiwoo proposes a decision from the log; everyone answers the same reading; it is recorded.
-    await act("Jiwoo", "propose", { text: "Predict crowding in the library and cafeteria" });
+    // Jiwoo settles it in the chat; the Moderator opens a check; everyone answers the same reading; it is recorded.
+    const settled = "Let's go with predicting crowding in the library and cafeteria.";
+    await act("Jiwoo", "group", { text: settled });
     await until(() => view("Minsu"), (v) => v.agreement?.status === "collecting");
+    // Dragging a message into the decision log no longer proposes it.
+    await assert.rejects(act("Jiwoo", "propose", { text: "Anything" }));
     for (const name of ["Minsu", "Jiwoo", "Taeho"]) {
       const check = cards(await view(name)).find((c) => c.kind === "understanding_check" && c.status === "open")!;
       assert.ok(check && check.kind === "understanding_check");
       await act(name, "check/answer", { checkId: check.checkId, label: "Yes, as stated", approve: true });
     }
     const agreed = await until(() => view("Minsu"), (v) => v.log.length === 1);
-    assert.equal(agreed.log[0].text, "Predict crowding in the library and cafeteria");
+    const statement = agreed.log[0].text;
+    assert.match(statement, /predicting crowding in the library and cafeteria/);
     assert.equal(agreed.log[0].agreed, "3/3");
 
     // Members can fix the wording later; the agreed original is kept. The group page shows it.
@@ -107,7 +111,7 @@ test("accounts, groups, a meeting room with agents, an agreed decision and its l
     });
     const detail = await call("GET", `/api/groups/${group.code}`, "Jiwoo");
     assert.equal(detail.decisions[0].text, "Predict crowding in the library and cafeteria (pilot)");
-    assert.equal(detail.decisions[0].original, "Predict crowding in the library and cafeteria");
+    assert.equal(detail.decisions[0].original, statement);
     assert.equal(detail.decisions[0].editedBy, "Taeho");
 
     // The team chat is saved for the next meeting's room.

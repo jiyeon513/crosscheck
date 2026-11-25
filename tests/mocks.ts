@@ -12,31 +12,34 @@ const userTexts = (turns: PrivateTurn[]) => turns.filter((t) => t.role === "user
 
 // These fixtures exercise the same response validation as live calls.
 export function enableFixtureModels() {
-  useFixtureGenerator((prompt, context) => {
-    switch (prompt) {
-      case "moderator/find_missing_angle": return findMissingAngle(context as MissingAngleInput);
-      case "moderator/detect_decision": return detectDecision(context as DetectDecisionInput);
-      case "moderator/compare_understanding": return compareUnderstanding(context as CompareInput);
-      case "personal/chat": return chat(context as ChatInput);
-      case "personal/angle_reply":
-      case "personal/react": {
-        const input = context as AngleReplyInput & ReactInput;
-        const value = prompt === "personal/react" ? react(input) : angleReply(input);
-        const offered = "has_view" in value ? value.has_view : value.suggest;
-        const note = input.privateHistory.filter(turn => turn.role === "user").at(-1);
-        return offered && note
-          ? { kind: "grounded", draft: value.draft, nudge: value.nudge, evidence: [{ id: note.id, quote: note.text }] }
-          : { kind: "none", draft: "", nudge: "", evidence: [] };
-      }
-      case "personal/suggest_check_answer": {
-        const input = context as CheckSuggestInput;
-        const out = suggestCheckAnswer(input);
-        const note = input.privateHistory.filter(turn => turn.role === "user").at(-1);
-        return { ...out, why: out.why || input.question, evidence: out.suggested_option && note ? [{ id: note.id, quote: note.text }] : [] };
-      }
-      default: throw new Error("Unregistered test prompt: " + prompt);
+  useFixtureGenerator(fixtureResponse);
+}
+
+/** The fixture answer for one prompt. Tests can wrap it to override a single prompt. */
+export function fixtureResponse(prompt: string, context: object): unknown {
+  switch (prompt) {
+    case "moderator/find_missing_angle": return findMissingAngle(context as MissingAngleInput);
+    case "moderator/detect_decision": return detectDecision(context as DetectDecisionInput);
+    case "moderator/compare_understanding": return compareUnderstanding(context as CompareInput);
+    case "personal/chat": return chat(context as ChatInput);
+    case "personal/angle_reply":
+    case "personal/react": {
+      const input = context as AngleReplyInput & ReactInput;
+      const value = prompt === "personal/react" ? react(input) : angleReply(input);
+      const offered = "has_view" in value ? value.has_view : value.suggest;
+      const note = input.privateHistory.filter(turn => turn.role === "user").at(-1);
+      return offered && note
+        ? { kind: "grounded", draft: value.draft, nudge: value.nudge, evidence: [{ id: note.id, quote: note.text }] }
+        : { kind: "none", draft: "", nudge: "", evidence: [] };
     }
-  });
+    case "personal/suggest_check_answer": {
+      const input = context as CheckSuggestInput;
+      const out = suggestCheckAnswer(input);
+      const note = input.privateHistory.filter(turn => turn.role === "user").at(-1);
+      return { ...out, why: out.why || input.question, evidence: out.suggested_option && note ? [{ id: note.id, quote: note.text }] : [] };
+    }
+    default: throw new Error("Unregistered test prompt: " + prompt);
+  }
 }
 
 // ---------- moderator ----------

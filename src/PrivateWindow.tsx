@@ -252,21 +252,35 @@ const SOURCE_LABEL: Record<ShareSuggestionCard["source"], string> = {
   chat: "Draft for the team",
 };
 
+/** The draft on a card starts folded, so a reply plus its card does not fill the window. */
+function DraftToggle({ shown, onToggle, id }: { shown: boolean; onToggle: () => void; id: string }) {
+  return (
+    <button className="pcard-toggle" type="button" aria-expanded={shown} aria-controls={id} onClick={onToggle}>
+      <span aria-hidden="true">{shown ? "▾" : "▸"}</span> {shown ? "Hide draft" : "Show draft"}
+    </button>
+  );
+}
+
 function ShareCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; onAsk: (text: string) => void }) {
   const [text, setText] = useState(card.draft);
+  const [shown, setShown] = useState(false);
   const { busy, error, run } = useCardAction(act);
   const open = card.status === "open";
+  const draftId = `draft-${card.id}`;
   return (
     <article className={`pcard share ${card.status}`}>
       <p className="pcard-kicker">{SOURCE_LABEL[card.source]}</p>
       {card.relayedQuestion && <blockquote className="pcard-decision">{card.relayedQuestion.author} · {card.relayedQuestion.text}</blockquote>}
       <p className="pcard-nudge">{card.nudge}</p>
-      {open ? (
-        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Draft to share" />
-      ) : (
-        <p className="pcard-draft">{card.draft}</p>
-      )}
-      {open ? (
+      <DraftToggle shown={shown} onToggle={() => setShown((value) => !value)} id={draftId} />
+      {shown ? (
+        open ? (
+          <textarea id={draftId} value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Draft to share" />
+        ) : (
+          <p id={draftId} className="pcard-draft">{card.draft}</p>
+        )
+      ) : null}
+      {open && shown ? (
         <div className="pcard-actions">
           <button
             className="btn primary small"
@@ -288,7 +302,7 @@ function ShareCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; 
             Not now
           </button>
         </div>
-      ) : (
+      ) : open ? null : (
         <p className="pcard-status">{statusLabel(card.status)}</p>
       )}
       {error ? <p className="error small-note">{error}</p> : null}
@@ -301,17 +315,22 @@ function ShareCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; 
 
 function ConcernCardView({ card, act, onAsk }: { card: ConcernCard; act: Act; onAsk: (text: string) => void }) {
   const [text, setText] = useState(card.draft);
+  const [shown, setShown] = useState(false);
   const { busy, error, run } = useCardAction(act);
   const open = card.status === "open";
+  const draftId = `draft-${card.id}`;
   return (
     <article className={`pcard concern ${card.status}`}>
       <p className="pcard-kicker">Concern · {card.label}</p>
-      {open ? (
-        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Concern to raise" />
-      ) : (
-        <p className="pcard-draft">{card.draft}</p>
-      )}
-      {open ? (
+      <DraftToggle shown={shown} onToggle={() => setShown((value) => !value)} id={draftId} />
+      {shown ? (
+        open ? (
+          <textarea id={draftId} value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Concern to raise" />
+        ) : (
+          <p id={draftId} className="pcard-draft">{card.draft}</p>
+        )
+      ) : null}
+      {open && shown ? (
         <div className="pcard-actions">
           <button
             className="btn primary small"
@@ -333,7 +352,7 @@ function ConcernCardView({ card, act, onAsk }: { card: ConcernCard; act: Act; on
             Not now
           </button>
         </div>
-      ) : (
+      ) : open ? null : (
         <p className="pcard-status">{statusLabel(card.status)}</p>
       )}
       {error ? <p className="error small-note">{error}</p> : null}
