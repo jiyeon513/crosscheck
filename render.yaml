@@ -12,9 +12,9 @@ services:
       - key: OPENROUTER_API_KEY
         sync: false        # asked for when the Blueprint is created; never committed
       - key: LLM_MODEL
-        value: openai/gpt-5-mini
+        value: openai/gpt-6-luna
       - key: PERSONAL_LLM_MODEL
-        value: openai/gpt-5-mini
+        value: openai/gpt-6-luna
       - key: LLM_REASONING_EFFORT
         value: low
       - key: DATA_DIR

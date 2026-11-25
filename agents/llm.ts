@@ -32,15 +32,15 @@ export function settings() {
     apiKey,
     baseUrl: env.LLM_BASE_URL || "https://openrouter.ai/api/v1",
     mock,
-    model: env.LLM_MODEL || "openai/gpt-5-mini",
+    model: env.LLM_MODEL || "openai/gpt-6-luna",
     reasoningEffort: env.LLM_REASONING_EFFORT ?? "low",
     jsonMode: env.LLM_JSON_MODE !== "0",
     maxTokens: Number(env.LLM_MAX_TOKENS || 1500),
     temperature: env.LLM_TEMPERATURE ? Number(env.LLM_TEMPERATURE) : undefined,
     timeoutMs: Number(env.LLM_TIMEOUT_MS || 65_000),
     dryRun: env.LLM_DRY_RUN === "1",
-    priceIn: Number(env.LLM_PRICE_IN || 0.25),
-    priceOut: Number(env.LLM_PRICE_OUT || 2.0),
+    priceIn: Number(env.LLM_PRICE_IN || 0.1),
+    priceOut: Number(env.LLM_PRICE_OUT || 0.5),
   };
 }
 
@@ -123,7 +123,7 @@ export function useFixtureGenerator(generator: FixtureGenerator): void {
 }
 
 /** Personal Agent model. It must support strict JSON-schema output on OpenRouter. */
-export const PERSONAL_MODEL = "openai/gpt-5-mini";
+export const PERSONAL_MODEL = "openai/gpt-6-luna";
 export function personalModel(): string {
   return process.env.PERSONAL_LLM_MODEL || PERSONAL_MODEL;
 }
