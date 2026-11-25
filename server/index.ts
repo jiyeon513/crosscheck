@@ -12,7 +12,8 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import http from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { llmInfo } from "../agents/llm";
+import { criticSettings } from "../agents/critic";
+import { llmInfo, modelsInUse } from "../agents/llm";
 import { bearer, HttpError, logIn, logOut, requireUser, signUp } from "./auth";
 import { serveFile, uploadFile } from "./files";
 import { createGroup, editDecision, groupDetail, joinGroup, listGroups, scheduleMeeting } from "./groups";
@@ -39,7 +40,10 @@ async function readJson(req: http.IncomingMessage): Promise<Body> {
 }
 
 async function route(method: string, path: string, body: Body, token: string) {
-  if (method === "GET" && path === "/api/health") return { ok: true, llm: llmInfo() };
+  if (method === "GET" && path === "/api/health") {
+    const critic = criticSettings();
+    return { ok: true, llm: llmInfo(), models: { ...modelsInUse(), critic: critic.mode === "off" ? "off" : critic.model, criticMode: critic.mode } };
+  }
   if (method === "POST" && path === "/api/auth/signup") return signUp(body);
   if (method === "POST" && path === "/api/auth/login") return logIn(body);
 

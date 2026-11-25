@@ -44,6 +44,12 @@ export function settings() {
   };
 }
 
+/** The model each agent uses, for /api/health. The critic is reported by agents/critic.ts. */
+export function modelsInUse(): { moderator: string; personal: string } {
+  const s = settings();
+  return { moderator: s.mock ? "mock" : s.model, personal: s.mock ? "mock" : personalModel() };
+}
+
 export function llmInfo(): { mode: "mock" | "unconfigured" | "live"; model: string } {
   const s = settings();
   return { mode: s.mock ? "mock" : s.apiKey ? "live" : "unconfigured", model: s.mock ? "mock" : personalModel() };

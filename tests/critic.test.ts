@@ -1,7 +1,7 @@
 // The critic: code checks on what the Moderator is about to show, and when a stronger model's correction is used.
 import { strict as assert } from "node:assert";
 import { afterEach, test } from "node:test";
-import { checkProblems, checkRisks, comparisonProblems, comparisonRisks, reviewCheck, reviewComparison } from "../agents/critic";
+import { checkProblems, checkRisks, comparisonProblems, comparisonRisks, criticSettings, DEFAULT_CRITIC_MODEL, reviewCheck, reviewComparison } from "../agents/critic";
 import type { DetectDecisionInput } from "../agents/moderator";
 import type { DecisionDetection } from "../agents/protocol";
 import { enableFixtureModels } from "./mocks";
@@ -65,4 +65,15 @@ test("critic: the follow-up after a split", async () => {
   const merged = await reviewComparison(live, { ...res, groups: [[1], [2], [3]], anonymous_question: "Quick check before we move on: live or typical?" });
   assert.equal(merged.aligned, true);
   assert.equal(merged.anonymous_question, "");
+});
+
+test("critic: on by default with a live model, off with fixture models, and CRITIC_MODE=off turns it off", () => {
+  assert.deepEqual(criticSettings(false), { model: DEFAULT_CRITIC_MODEL, mode: "risk" });
+  assert.deepEqual(criticSettings(true), { model: null, mode: "off" });
+  process.env.CRITIC_LLM_MODEL = "openai/gpt-6.2-astra";
+  assert.deepEqual(criticSettings(true), { model: "openai/gpt-6.2-astra", mode: "risk" });
+  process.env.CRITIC_MODE = "always";
+  assert.equal(criticSettings(false).mode, "always");
+  process.env.CRITIC_MODE = "off";
+  assert.equal(criticSettings(false).mode, "off");
 });

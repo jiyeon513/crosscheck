@@ -15,6 +15,12 @@ services:
         value: openai/gpt-6-luna
       - key: PERSONAL_LLM_MODEL
         value: openai/gpt-6-luna
+      # A stronger model reviews a check before it opens and the follow-up after a split.
+      # CRITIC_MODE: risk (only when code checks find a problem), always, or off.
+      - key: CRITIC_LLM_MODEL
+        value: anthropic/claude-opus-5.5
+      - key: CRITIC_MODE
+        value: risk
       - key: LLM_REASONING_EFFORT
         value: low
       - key: DATA_DIR
