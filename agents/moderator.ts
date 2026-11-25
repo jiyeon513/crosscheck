@@ -77,6 +77,7 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
     // Only a real number from the agreed list counts, and only when this is not itself a new decision.
     challenged: !ok && Number.isInteger(data.challenged) && data.challenged! >= 1 && data.challenged! <= (input.agreed?.length ?? 0)
       ? data.challenged : 0,
+    open_challenged: !ok && Boolean(input.openProposal?.trim()) && data.open_challenged === true,
   };
 }
 

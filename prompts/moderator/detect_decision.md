@@ -22,6 +22,8 @@ A decision "Under discussion" is one the team is talking about again (their answ
 
 When the newest message questions, disagrees with or wants to change one of the decisions in "Already agreed in this meeting" without itself settling a new version ("Actually, I'm not sure the cafeteria works", "Can we rethink the deadline?"), set "challenged" to that decision's number and "is_decision" to false. Otherwise "challenged" is 0.
 
+When there is an "Open check" and the newest message questions it or wants to change it without itself settling a new version ("Could we push it to Saturday instead?", "Wait, I'm not sure about Qualtrics"), set "open_challenged" to true and "is_decision" to false. Asking what the proposal means, or agreeing with it, is not a challenge. Otherwise "open_challenged" is false.
+
 When it is a decision, prepare a private check for the members. People often agree to the same words while picturing different things, so find where that could happen here.
 - "decision": one neutral sentence that restates what was decided, in the team's own words. Add nothing that was not said.
 - "ambiguity": the aspect most likely to be understood differently, in 1 to 4 words (for example scope, deliverable, deadline, owner).
@@ -39,6 +41,7 @@ Reply with one JSON object and nothing else:
   "question": "",
   "options": [],
   "challenged": 0,
+  "open_challenged": false,
   "reason": "one short sentence for the developers"
 }
 When "is_decision" is false, leave decision, ambiguity, question and options empty.

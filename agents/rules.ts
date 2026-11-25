@@ -16,8 +16,6 @@ export type Rules = {
   groupContextMessages: number;
   /** How many recent private turns a personal agent reads. */
   privateContextTurns: number;
-  /** A new decision replaces the open check only while fewer than this share of members have answered it. */
-  supersedeBelowAnswered: number;
 };
 
 export const DEFAULT_RULES: Rules = {
@@ -28,5 +26,4 @@ export const DEFAULT_RULES: Rules = {
   checkTimeoutMs: 180_000,
   groupContextMessages: 60,
   privateContextTurns: 30,
-  supersedeBelowAnswered: 0.5,
 };

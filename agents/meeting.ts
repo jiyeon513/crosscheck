@@ -488,6 +488,9 @@ export class Meeting {
       if (!d.is_decision) {
         // Someone questions an agreed decision: ask the team first instead of reopening it.
         if (d.challenged && !open) this.askToRevisit(agreed[d.challenged - 1]);
+        // The team wants to change the proposal being checked: stop collecting answers to the old
+        // wording, so they can never agree it by default, and follow the discussion instead.
+        else if (d.open_challenged && open) this.holdCheck(open);
         // A member pressed "Check agreement now": say so rather than doing nothing.
         else if (trigger === "host_request" && !open && !this.pendingDetection) {
           this.moderatorSays("I could not find a clear proposal to check yet. Say it in one sentence, or drag a message into the Decision log.", { type: "no_proposal" });
@@ -499,16 +502,27 @@ export class Meeting {
         if (this.discussing?.recordId) this.discussing = null;
         continue;
       }
-      if (open) {
-        if (sameText(open.decision, d.decision)) continue;
-        // Replace the open check only while few have answered; otherwise let it finish first.
-        const answered = Object.keys(open.answers).length;
-        if (trigger !== "host_request" && answered / open.askedOf.length >= this.rules.supersedeBelowAnswered) continue;
-      }
+      // The team settled a different version while answers were coming in: the answers so far were
+      // about the old wording, so the old check closes without a result and the new version is checked.
+      if (open && sameText(open.decision, d.decision)) continue;
       // A new version of a decision the team is revisiting replaces the agreed one once everyone agrees.
       await this.openCheck(d, this.discussing?.recordId);
-      this.pendingDetection = undefined;
+      // Opening a check waits for every agent's suggested answer. A member may write meanwhile
+      // (for example to change the proposal), so only skip the next round if nobody did.
+      if (!this.group.slice(historyLength).some((m) => m.kind === "user")) this.pendingDetection = undefined;
     }
+  }
+
+  /** Close the open check without a result and treat its proposal as under discussion. */
+  private holdCheck(check: Check): void {
+    check.status = "cancelled";
+    this.closeCheckCards(check);
+    this.discussing = { decision: check.decision, status: "open", ...(check.replaces ? { recordId: check.replaces } : {}) };
+    this.moderatorSays(
+      `It sounds like the team may change "${check.decision}", so I stopped collecting answers. ` +
+        "When you settle on a version, even the same one, say it here and I will check it with everyone again.",
+      { type: "check_closed" },
+    );
   }
 
   /** The Moderator asks, without naming anyone, whether the team wants to revisit an agreed decision. */

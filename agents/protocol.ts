@@ -115,6 +115,8 @@ export type DecisionDetection = {
   reason: string;
   /** 1-based number of an already agreed decision that the newest message questions or wants to change; 0 if none. */
   challenged?: number;
+  /** The newest message questions or wants to change the proposal that is being checked now, without settling a new version. */
+  open_challenged?: boolean;
 };
 
 export type Comparison = {
