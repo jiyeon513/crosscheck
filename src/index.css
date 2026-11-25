@@ -2153,34 +2153,6 @@ button.schedule-row.past:hover {
   white-space: nowrap;
 }
 
-.pcard-toggle {
-  justify-self: start;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border: 1px solid var(--agent-line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--agent);
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.pcard-toggle:hover {
-  background: var(--agent-soft);
-}
-
-.pcard-toggle:focus-visible {
-  outline: 2px solid var(--agent);
-  outline-offset: 2px;
-}
-
-.pcard-toggle span[aria-hidden="true"] {
-  font-size: 9px;
-}
-
 .pcard-ask {
   justify-self: start;
   padding: 0;

@@ -213,7 +213,9 @@ function PrivateEntry({
   const ask = (text: string) => onAsk({ kind: "card", id: card.id, author: cardTitle(card), text });
   switch (card.kind) {
     case "share_suggestion":
-      return <ShareCard card={card} act={act} onAsk={ask} />;
+      return card.source === "chat"
+        ? <ChatDraftCard card={card} act={act} onAsk={ask} />
+        : <ShareCard card={card} act={act} onAsk={ask} />;
     case "understanding_check":
       return <CheckCard card={card} act={act} onAsk={ask} />;
     case "concern":
@@ -252,57 +254,81 @@ const SOURCE_LABEL: Record<ShareSuggestionCard["source"], string> = {
   chat: "Draft for the team",
 };
 
-/** The draft on a card starts folded, so a reply plus its card does not fill the window. */
-function DraftToggle({ shown, onToggle, id }: { shown: boolean; onToggle: () => void; id: string }) {
-  return (
-    <button className="pcard-toggle" type="button" aria-expanded={shown} aria-controls={id} onClick={onToggle}>
-      <span aria-hidden="true">{shown ? "▲" : "▼"}</span> {shown ? "Hide draft" : "Show draft"}
-    </button>
-  );
-}
-
-function ShareCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; onAsk: (text: string) => void }) {
+/**
+ * A draft from the private chat follows the agent's reply right above it, so it is one small row
+ * with a toggle on the right; opening it shows the draft and the Share buttons.
+ */
+function ChatDraftCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; onAsk: (text: string) => void }) {
   const [text, setText] = useState(card.draft);
   const [shown, setShown] = useState(false);
   const { busy, error, run } = useCardAction(act);
   const open = card.status === "open";
   const draftId = `draft-${card.id}`;
-  // A draft from the private chat follows the agent's reply right above it, so it is a single
-  // small row until opened. Cards the agent offers on its own keep their reason visible.
-  const compact = card.source === "chat";
   return (
-    <article className={`pcard share ${card.status}${compact ? " compact" : ""}${compact && shown ? " expanded" : ""}`}>
-      {compact ? (
-        <button
-          className="pcard-row"
-          type="button"
-          aria-expanded={shown}
-          aria-controls={draftId}
-          onClick={() => setShown((value) => !value)}
-        >
-          <span className="pcard-kicker">{SOURCE_LABEL[card.source]}</span>
-          {open ? null : <span className="pcard-row-state">{statusLabel(card.status)}</span>}
-          <span className="pcard-chevron" aria-hidden="true">
-            {shown ? "▲" : "▼"}
-          </span>
-          <span className="sr-only">{shown ? "Hide draft" : "Show draft"}</span>
-        </button>
-      ) : (
-        <>
-          <p className="pcard-kicker">{SOURCE_LABEL[card.source]}</p>
-          {card.relayedQuestion && <blockquote className="pcard-decision">{card.relayedQuestion.author} · {card.relayedQuestion.text}</blockquote>}
-          <p className="pcard-nudge">{card.nudge}</p>
-          <DraftToggle shown={shown} onToggle={() => setShown((value) => !value)} id={draftId} />
-        </>
-      )}
+    <article className={`pcard share ${card.status} compact${shown ? " expanded" : ""}`}>
+      <button className="pcard-row" type="button" aria-expanded={shown} aria-controls={draftId} onClick={() => setShown((value) => !value)}>
+        <span className="pcard-kicker">{SOURCE_LABEL[card.source]}</span>
+        {open ? null : <span className="pcard-row-state">{statusLabel(card.status)}</span>}
+        <span className="pcard-chevron" aria-hidden="true">
+          {shown ? "▲" : "▼"}
+        </span>
+        <span className="sr-only">{shown ? "Hide draft" : "Show draft"}</span>
+      </button>
       {shown ? (
-        open ? (
-          <textarea id={draftId} value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Draft to share" />
-        ) : (
-          <p id={draftId} className="pcard-draft">{card.draft}</p>
-        )
+        <>
+          {open ? (
+            <textarea id={draftId} value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Draft to share" />
+          ) : (
+            <p id={draftId} className="pcard-draft">{card.draft}</p>
+          )}
+          {open ? (
+            <div className="pcard-actions">
+              <button
+                className="btn primary small"
+                type="button"
+                disabled={busy || !text.trim()}
+                onClick={() => run("share", { cardId: card.id, text, mode: "named" })}
+              >
+                Share
+              </button>
+              <button
+                className="btn secondary small"
+                type="button"
+                disabled={busy || !text.trim()}
+                onClick={() => run("share", { cardId: card.id, text, mode: "anonymous" })}
+              >
+                Share anonymously
+              </button>
+              <button className="btn ghost small" type="button" disabled={busy} onClick={() => run("dismiss", { cardId: card.id })}>
+                Not now
+              </button>
+            </div>
+          ) : null}
+          {error ? <p className="error small-note">{error}</p> : null}
+          <button className="pcard-ask" type="button" onClick={() => onAsk(card.draft)}>
+            Ask my agent about this
+          </button>
+        </>
       ) : null}
-      {open && shown ? (
+    </article>
+  );
+}
+
+function ShareCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; onAsk: (text: string) => void }) {
+  const [text, setText] = useState(card.draft);
+  const { busy, error, run } = useCardAction(act);
+  const open = card.status === "open";
+  return (
+    <article className={`pcard share ${card.status}`}>
+      <p className="pcard-kicker">{SOURCE_LABEL[card.source]}</p>
+      {card.relayedQuestion && <blockquote className="pcard-decision">{card.relayedQuestion.author} · {card.relayedQuestion.text}</blockquote>}
+      <p className="pcard-nudge">{card.nudge}</p>
+      {open ? (
+        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label="Draft to share" />
+      ) : (
+        <p className="pcard-draft">{card.draft}</p>
+      )}
+      {open ? (
         <div className="pcard-actions">
           <button
             className="btn primary small"
@@ -324,15 +350,13 @@ function ShareCard({ card, act, onAsk }: { card: ShareSuggestionCard; act: Act; 
             Not now
           </button>
         </div>
-      ) : open || compact ? null : (
+      ) : (
         <p className="pcard-status">{statusLabel(card.status)}</p>
       )}
       {error ? <p className="error small-note">{error}</p> : null}
-      {!compact || shown ? (
-        <button className="pcard-ask" type="button" onClick={() => onAsk(compact ? card.draft : card.nudge)}>
-          Ask my agent about this
-        </button>
-      ) : null}
+      <button className="pcard-ask" type="button" onClick={() => onAsk(card.nudge)}>
+        Ask my agent about this
+      </button>
     </article>
   );
 }
