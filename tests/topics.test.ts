@@ -42,11 +42,28 @@ test("after silence the agents report labels, and the Moderator receives labels 
   await m.tick();
 
   const reports = m.trace.filter((e) => e.type === "agent_to_mod" && e.data.type === "topic_labels");
-  assert.deepEqual(reports.map((e) => [e.from, e.data.labels]), [["agent:Taeho", ["campus data sources"]]]);
+  // The labels are logged merged, never per agent.
+  assert.deepEqual(reports.map((e) => [e.from, e.data.labels]), [["agents", ["campus data sources"]]]);
 
   const call = m.trace.find((e) => e.type === "llm_call" && e.data.prompt === "moderator/find_missing_angle");
   const input = String(call?.data.input);
   assert.match(input, /campus data sources/);
   assert.doesNotMatch(input, /Wi-Fi access counts|Taeho/);
   assert.deepEqual(findPrivacyLeaks(m), []);
+});
+
+test("when labels were used and nobody gets a card, the Moderator does not post the angle in public", async () => {
+  let clock = 0;
+  const m = new Meeting({ goal: "Pick a project topic", host: "Minsu", now: () => clock, tracePrompts: true });
+  m.join("Jiwoo");
+  m.join("Taeho");
+  await m.sendPrivateMessage("Taeho", "Maybe the city publishes open data we could use.");
+  await m.postGroupMessage("Minsu", "How about a study group matching app?");
+  await m.postGroupMessage("Jiwoo", "A chatbot for club recruiting could work too.");
+  clock += 65_000;
+  await m.tick();
+
+  assert.ok(m.trace.some((e) => e.type === "agent_to_mod" && e.data.type === "topic_labels"));
+  assert.ok(m.trace.some((e) => e.type === "mod_to_agents" && e.data.type === "angle_query"));
+  assert.deepEqual(m.group.filter((g) => g.kind === "moderator"), []);
 });
