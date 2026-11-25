@@ -17,6 +17,7 @@ import type { PrivateItem, ShareSuggestionCard, UnderstandingCheckCard, ConcernC
 type Step =
   | { do: "private" | "group"; user: string; text: string; after?: number; title?: string }
   | { do: "revise"; user: string; text: string; after?: number; title?: string }
+  | { do: "angle"; user: string; text: string; after?: number; title?: string }
   | { do: "wait"; seconds: number; title?: string }
   | { do: "share"; user: string; fallback: string; after?: number; title?: string }
   | { do: "answer"; user: string; prefer: string; after?: number; title?: string }
@@ -89,6 +90,9 @@ async function run(step: Step): Promise<string> {
       await meeting.reviseCheck(step.user, version.checkId, step.text);
       return `${step.user} opens the revised proposal for fresh approval`;
     }
+    case "angle":
+      await meeting.requestAngle(step.user, step.text, "find_contribution");
+      return `${step.user} presses [Ask about an angle]`;
     case "wait":
       clock += step.seconds * 1000;
       await meeting.tick();
@@ -105,7 +109,9 @@ async function run(step: Step): Promise<string> {
     case "answer": {
       const card = cardsOf(step.user).filter((c): c is UnderstandingCheckCard => c.kind === "understanding_check" && c.status === "open").pop();
       if (!card) return `${step.user} has no open agreement check (skipped)`;
-      const label = card.options.find((o) => o.toLowerCase().includes(step.prefer.toLowerCase())) ?? card.options[0];
+      // "prefer" may list several keywords separated by "|"; the first option containing one of them is chosen.
+      const wanted = step.prefer.toLowerCase().split("|");
+      const label = card.options.find((o) => wanted.some((w) => o.toLowerCase().includes(w))) ?? card.options[0];
       const hint = card.suggested ? `   (agent suggested "${card.suggested}": ${card.why})` : "";
       await meeting.answerCheck(step.user, card.checkId, label, true);
       return `${step.user} answers privately: "${label}"${hint}`;

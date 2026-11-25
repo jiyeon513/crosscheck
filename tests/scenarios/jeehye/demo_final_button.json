@@ -1,0 +1,33 @@
+{
+  "name": "DPM4 final demo · cafeteria app · Task 2 by the Ask about an angle button (as in the video)",
+  "goal": "Propose an app that helps students choose where to eat on campus",
+  "host": "Minsu",
+  "participants": ["Minsu", "Soyeon", "Taeho"],
+  "steps": [
+    { "title": "Opening · the team brainstorms. Expected: no agreement check.", "do": "group", "user": "Minsu", "text": "We need an idea for tonight's proposal. What about putting all the campus cafeteria menus in one place? I always have to check each one separately." },
+    { "do": "group", "user": "Taeho", "text": "I'd use that. I usually check the menus right before class ends." },
+    { "do": "group", "user": "Minsu", "text": "We could put the prices next to the menus, too." },
+
+    { "title": "TASK 1 · Taeho thinks with his agent. Expected: a private reply; nothing reaches the team.", "do": "private", "user": "Taeho", "text": "Menus and prices are useful, but sometimes I like both options. What else would help me pick?" },
+    { "do": "group", "user": "Soyeon", "text": "Yeah, if both lunches are around the same price, I'd still be standing outside class trying to pick one." },
+    { "do": "private", "user": "Taeho", "text": "A shorter line would decide it for me. Yesterday the line was out the door at noon, but at 12:30 I walked right in. Could we show when each cafeteria usually gets busy?" },
+
+    { "title": "TASK 2 · Minsu presses Ask about an angle. Expected: only Taeho gets a share card.", "do": "angle", "user": "Minsu", "text": "We've got menus and prices. What else could we show students to help them decide where to eat?" },
+    { "do": "share", "user": "Taeho", "after": 20, "fallback": "What about putting wait times next to the menus? If both places have something I like, I'd go for the shorter line." },
+
+    { "title": "TASK 3 · Minsu posts the sentence to submit. Expected: an agreement check about what 'wait times' means.", "do": "group", "user": "Minsu", "text": "Okay, I think we've got our idea. Let's put this in tonight's proposal: Students can compare campus cafeteria menus, prices, and wait times to decide where to eat." },
+    { "do": "private", "user": "Taeho", "text": "Does 'wait times' sound like we'd show how long the line is right now?" },
+    { "do": "group", "user": "Taeho", "text": "Quick check before we submit. Are we promising live wait times, or the usual wait at that time of day?" },
+    { "do": "answer", "user": "Minsu", "prefer": "live|real|right now|current" },
+    { "do": "answer", "user": "Soyeon", "prefer": "typical|usual|busy|average|historical" },
+    { "do": "answer", "user": "Taeho", "prefer": "typical|usual|busy|average|historical" },
+
+    { "title": "The team talks it through. Expected: individual views do not reopen the check; Minsu's adoption opens version 2.", "do": "group", "user": "Minsu", "text": "Oh, I was picturing a live estimate." },
+    { "do": "group", "user": "Taeho", "text": "I meant the usual wait. We could collect that ourselves, but I'm not sure how we'd keep a live estimate updated." },
+    { "do": "group", "user": "Soyeon", "text": "The usual wait would be enough for me. I'd just want to know if noon is a bad time to go." },
+    { "do": "group", "user": "Minsu", "text": "Okay, let's go with typical wait times by day and time." },
+    { "do": "answer", "user": "Minsu", "prefer": "typical|usual|day and time|as stated|yes" },
+    { "do": "answer", "user": "Soyeon", "prefer": "typical|usual|day and time|as stated|yes" },
+    { "do": "answer", "user": "Taeho", "prefer": "typical|usual|day and time|as stated|yes" }
+  ]
+}

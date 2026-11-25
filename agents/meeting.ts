@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import { llmInfo, type LLMRecord } from "./llm";
 import * as moderator from "./moderator";
 import * as personal from "./personal";
+import { topicLabels } from "./topics";
 import { DEFAULT_RULES, type Rules } from "./rules";
 import { isUnsure, norm } from "./format";
 import { TEAM_QUESTION_NOTICE } from "./protocol";
@@ -389,7 +390,7 @@ export class Meeting {
     this.userMsgsAtLastAngleRun = userMsgs;
     try {
       const res = await moderator.findMissingAngle(
-        { goal: this.goal, group: this.groupContext(), anglesAsked: this.anglesAsked },
+        { goal: this.goal, group: this.groupContext(), anglesAsked: this.anglesAsked, heldTopics: await this.collectHeldTopics() },
         this.llmLog("moderator"),
       );
       if (res.action !== "ask_angle" || this.stage !== "ideation") return;
@@ -402,6 +403,21 @@ export class Meeting {
     } finally {
       this.angleBusy = false;
     }
+  }
+
+  /**
+   * Task 2: each personal agent reports short topic labels for its member's unshared thoughts.
+   * The Moderator gets them merged and shuffled: no names, no private sentences.
+   */
+  private async collectHeldTopics(): Promise<string[]> {
+    this.log("mod_to_agents", "moderator", "agents", { type: "topic_query" });
+    const reports = await Promise.all(this.participants.map(async (p) => {
+      const labels = await topicLabels(this.ownerContext(p), this.llmLog(`agent:${p}`)).catch(() => [] as string[]);
+      if (labels.length) this.log("agent_to_mod", `agent:${p}`, "moderator", { type: "topic_labels", labels });
+      return labels;
+    }));
+    const seen = new Set<string>();
+    return shuffle(reports.flat()).filter((label) => !seen.has(norm(label)) && Boolean(seen.add(norm(label))));
   }
 
   private async askAboutAngle(angle: string, intent: "find_contribution" | "invite_brainstorm", relayedPost?: GroupMessage): Promise<boolean> {

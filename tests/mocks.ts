@@ -34,6 +34,11 @@ export function enableFixtureModels() {
         const note = input.privateHistory.filter(turn => turn.role === "user").at(-1);
         return { ...out, why: out.why || input.question, evidence: out.suggested_option && note ? [{ id: note.id, quote: note.text }] : [] };
       }
+      case "personal/topic_labels": {
+        const mine = userTexts((context as { privateHistory: PrivateTurn[] }).privateHistory).join(" ");
+        const labels = [/wi-?fi|data/i.test(mine) && "campus data sources", /crowd/i.test(mine) && "campus crowding"];
+        return { labels: labels.filter(Boolean) };
+      }
       default: throw new Error("Unregistered test prompt: " + prompt);
     }
   });
