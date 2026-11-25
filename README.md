@@ -2,109 +2,127 @@
 
 [Open the live prototype on Render](https://crosscheck-5269.onrender.com/)
 
-A group chat for student team projects. Each group keeps one ongoing team chat, a schedule of meetings, and a decision log per meeting. Inside a meeting, two kinds of agents help the team share ideas and leave with the same understanding:
+CrossCheck is a group chat for student team projects that helps a team share ideas and leave each meeting with the same understanding of what they decided. Next to the team chat, every member has a private **Personal Agent**, and a **Moderator** agent follows the meeting. Private thoughts stay private until the member chooses to share them, and every decision is confirmed by each member, privately, before it is recorded.
 
-| | Moderator (one per meeting) | Personal Agent (one per member) |
-|---|---|---|
-| Reads | The team chat, plus short labels from the personal agents | The team chat and its own member's private window |
-| Writes | Short messages in the team chat, and the decision log once everyone agrees | Replies and cards in its own member's private window |
-| Never | Reads private chats or names who said what | Posts in the team chat. Only the member can share. |
+Built with React 19 + Vite (web), Node 20 + TypeScript (server and agents), and OpenRouter (models). The live prototype runs on Render's free plan, so its data resets when the service restarts.
 
-Design direction: [docs/design-direction.md](docs/design-direction.md). Agent design and privacy boundary: [docs/agents-design.md](docs/agents-design.md).
+## Features
 
-## Run it locally
+| Feature | What the member sees |
+|---|---|
+| **Groups and meetings** | Create a group, share the invitation code, schedule meetings. Each group has one ongoing team chat and a decision log per meeting. |
+| **Task 1 · Think privately** | A private chat with your Personal Agent. It answers in your language, and can offer a *Draft for the team* (in the team's language) or a *Concern* you can raise with your name or anonymously. |
+| **Task 2 · Missing angles** | When the chat goes quiet, or anyone presses **◆ → Ask about an angle**, the Moderator asks every Personal Agent whether its member already has an idea the team has not heard. Matching members get a private card with an editable draft. |
+| **Task 3 · Agreement check** | When the team settles on something, the Moderator asks everyone, privately, about the part people might read differently. It reports only a count ("Agreement 2/3"), never who answered what. A change in the chat opens a new version; a request to change pauses the check. |
+| **Agents' table** | After a split check, the agents look for a compromise: each agent gives its member's reason to the Moderator alone, then the agents answer the Moderator's compromise without names. Anything drawn from private notes waits for the member's approval. An accepted compromise goes back to the team as a new check. |
+| **Decision log** | Only decisions everyone agreed to are saved, per meeting, and shown on the group home. Members can fix the wording later; the agreed original is kept. |
+
+## Agents
+
+| | Moderator (one per meeting) | Personal Agent (one per member) | Critic (optional) |
+|---|---|---|---|
+| Reads | The team chat only | The team chat and its own member's private window | The team chat only |
+| Does | Detects decisions, runs agreement checks, finds missing angles, runs the agents' table | Replies privately, suggests drafts and concerns, answers checks and the table for its member | Reviews a check question before it opens, and the follow-up after a split |
+| Never | Reads private chats or names who said what | Posts in the team chat; only the member can share | Posts anything itself |
+| Default model | `openai/gpt-6-luna` | `openai/gpt-6-luna` | `anthropic/claude-opus-5.5` |
+
+The privacy boundary is enforced in code, not only in prompts: the Moderator's inputs are built from the team chat alone, and only short labels cross from a Personal Agent to the Moderator. Design notes: [docs/agents-design.md](docs/agents-design.md), [docs/design-direction.md](docs/design-direction.md).
+
+## Code map
+
+The browser app starts in [src/main.tsx](src/main.tsx), which renders [App](src/App.tsx). The backend starts in [server/index.ts](server/index.ts). The Moderator and Personal Agent are implemented in [agents/moderator.ts](agents/moderator.ts) and [agents/personal.ts](agents/personal.ts), respectively. [agents/meeting.ts](agents/meeting.ts) coordinates when each agent runs and what context it receives.
+
+| Entry point | Role |
+|---|---|
+| `src/main.tsx` → `src/App.tsx` | Web app: mounts React and routes between login, home, group and meeting room |
+| `server/index.ts` | HTTP server: every `/api/*` route, file uploads, and the built web app from `dist/` |
+| `agents/meeting.ts` | The agent engine: one `Meeting` per room decides when each agent runs and what crosses the privacy boundary |
+| `agents/moderator.ts`, `agents/personal.ts` | One function per agent task; each calls one prompt in `prompts/` |
+
+```
+src/        Web app (React)
+server/     API, accounts, storage, meeting rooms
+agents/     Agent engine and model calls
+prompts/    One Markdown prompt per agent task (moderator/, personal/)
+tests/      Unit, flow and API tests, prompt fixtures, simulator
+docs/       Design notes
+```
+
+### Where each feature lives
+
+| Feature | Web app (`src/`) | Server (`server/`) | Agents (`agents/`, `prompts/`) |
+|---|---|---|---|
+| Login and accounts | `Login.tsx`, `api.tsx` | `auth.ts` (scrypt hashes, bearer sessions) | — |
+| Groups, invitation codes, meetings, decision logs | `Home.tsx`, `Start.tsx`, `Group.tsx` | `groups.ts`, `store.ts` (one JSON file) | — |
+| Meeting room layout and team chat | `Room.tsx`, `chatParts.tsx`, `useRoom.ts` (polls every 1.5 s) | `rooms.ts` (one room per meeting, all room actions) | `meeting.ts` |
+| Task 1 · private chat, drafts, concerns | `PrivateWindow.tsx` | `rooms.ts` → `private`, `share`, `concern` | `personal.ts` · `prompts/personal/chat.md`, `react.md` |
+| Task 2 · missing angles | `Meetings.tsx` (◆ Moderator menu) | `rooms.ts` → `angle` | `moderator.ts`, `topics.ts` · `find_missing_angle.md`, `angle_reply.md`, `topic_labels.md` |
+| Task 3 · agreement checks | `Meetings.tsx` (`AgreementBox`), `PrivateWindow.tsx` (check card) | `rooms.ts` → `check/*`, `reopen` | `meeting.ts`, `moderator.ts` · `detect_decision.md`, `compare_understanding.md`, `suggest_check_answer.md` |
+| Critic | — | — | `critic.ts` · `critic_check.md`, `critic_compare.md` |
+| Agents' table | `AgentsTable.tsx`, `agents-table.css` | `rooms.ts` → `table/start`, `table/speak` | `table.ts`, `membrane.ts` (private-text check) · `propose_bridge.md`, `table_*.md` |
+| Files and pictures | `chatParts.tsx` (attach, drop) | `files.ts` | Only file names reach the agents |
+| Model calls | — | — | `llm.ts` (OpenRouter, JSON output, models from env) |
+| Shared types | `model.ts` | — | `protocol.ts`, `table-protocol.ts` |
+| Timing and limits | — | — | `rules.ts` (silence 60 s, check timeout 3 min, …) |
+
+### How a team message flows
+
+1. `Room.tsx` sends `POST /api/rooms/:room/group`.
+2. `server/rooms.ts` finds the member's room and calls `Meeting.postGroupMessage()` in `agents/meeting.ts`.
+3. The Moderator (`moderator.detectDecision`) checks whether the message settles a decision, and each other member's Personal Agent (`personal.react`) checks whether it connects to something its member said privately.
+4. A decision opens a check: the critic may review the question (`critic.ts`), and each member gets a private check card with their agent's suggested reading.
+5. Every member's browser polls `GET /api/rooms/:room/view`, which returns only that member's view: the team chat, their own private window and the check status.
+
+## Run locally
 
 Node 20 or newer.
 
 ```bash
 npm ci
 cp .env.example .env   # set OPENROUTER_API_KEY
-npm run dev            # server on :8787, web app with hot reload on :5173
+npm run dev            # API on :8787, web app with hot reload on :5173
 ```
 
-Open http://localhost:5173, create an account, create a group, and share the invitation code. Use a second browser (or a private window) to log in as a teammate. Without `OPENROUTER_API_KEY` everything works except the agents, and the room shows "Agents are off".
+Open http://localhost:5173, create an account and a group, and share the invitation code. Use a second browser or a private window for a teammate. Without `OPENROUTER_API_KEY`, everything except the agents works.
 
-Data (accounts, groups, meetings, decisions, team chat) is saved in `data/crosscheck.json` (`DATA_DIR`). Passwords are stored as scrypt hashes.
+### Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENROUTER_API_KEY` | — | Required for the agents |
+| `LLM_MODEL` | `openai/gpt-6-luna` | Moderator model |
+| `PERSONAL_LLM_MODEL` | `openai/gpt-6-luna` | Personal Agent model (must support strict JSON schema) |
+| `CRITIC_LLM_MODEL` | `anthropic/claude-opus-5.5` | Critic model |
+| `CRITIC_MODE` | `risk` | `risk` (only when code checks find a problem), `always`, or `off` |
+| `DATA_DIR` | `./data` | Where `crosscheck.json` and uploads are stored |
+| `PORT` | `8787` | Server port |
+
+`GET /api/health` reports the models in use.
 
 ## Deploy
 
-The server serves both the API and the built web app, so one process is all it needs.
+The server serves both the API and the built web app, so one process is enough.
 
 ```bash
 npm ci && npm run build
-OPENROUTER_API_KEY=... DATA_DIR=/var/lib/crosscheck PORT=8787 npm start
+OPENROUTER_API_KEY=... DATA_DIR=/var/lib/crosscheck npm start
 ```
 
-Or with Docker: `docker build -t crosscheck .` then `docker run -p 8787:8787 -e OPENROUTER_API_KEY=... -v crosscheck-data:/data crosscheck`.
+- **Docker:** `docker build -t crosscheck .` then `docker run -p 8787:8787 -e OPENROUTER_API_KEY=... -v crosscheck-data:/data crosscheck`
+- **Render:** New → Blueprint, pick this repository (`render.yaml`), enter `OPENROUTER_API_KEY`. Environment values set in the Render dashboard override the code defaults. The free plan has no persistent disk.
 
-**Render** (`render.yaml`): in the Render dashboard choose New → Blueprint, pick this repository, and enter `OPENROUTER_API_KEY` when asked. The Blueprint uses the free plan, which has no persistent disk: accounts and chats are lost whenever the service restarts, sleeps after about 15 idle minutes, or redeploys. For lasting data, switch to a paid plan and uncomment the `disk` block.
-
-Any host that runs a Docker image or a Node 20+ process with a writable folder works the same way (Railway, Fly.io, a VM).
-
-## How the pieces fit
-
-The browser app starts in [src/main.tsx](src/main.tsx), which renders [App](src/App.tsx). The backend starts in [server/index.ts](server/index.ts). The Moderator and Personal Agent are implemented in [agents/moderator.ts](agents/moderator.ts) and [agents/personal.ts](agents/personal.ts), respectively. [agents/meeting.ts](agents/meeting.ts) coordinates when each agent runs and what context it receives.
-
-```
-Browser (src/)                    Server (server/)                         Agents (agents/, prompts/)
- Login, groups, group page ─────► auth.ts, groups.ts, store.ts (JSON file)
- Room.tsx ── polls the view ────► rooms.ts: one room per group meeting ───► meeting.ts decides WHEN each agent
- PrivateWindow.tsx ─ actions ───►  (members only, starts from earlier chat)  runs and WHAT crosses the privacy
-                                                                              boundary; moderator.ts / personal.ts
-```
-
-- A room is the group's **current meeting** (today's, else the next one). It starts from the group's recent chat, so the agents keep the context of earlier meetings.
-- Only the Moderator adds to a decision log, after everyone agrees. Members can correct the wording later; the agreed original is kept. Dropping a message on the decision log proposes it, and the Moderator opens an agreement check.
-- Room actions: `group`, `private`, `share`, `concern`, `dismiss`, `propose`, `angle`, `check/answer`, `check/start`, `check/compare` (host), `check/revise` (host), `check/cancel` (host). See `server/index.ts`.
-
-### What happens in a meeting
-
-| When | Who | What |
-|---|---|---|
-| A member writes in their private window | Their agent | Replies. It may offer a draft to share or a concern card. |
-| A teammate posts in the team chat | The other members' agents | If the post connects to something the member said before, suggest a reply draft, privately. Paused while a check collects answers; at most one open suggestion per member. |
-| A member asks the team for ideas in ordinary chat | Moderator, then the Personal Agents | The Moderator relays the original question and acknowledges delivery in the team chat. Members with a relevant idea from their own private conversation receive a private card showing the question and their editable draft. |
-| Any new team message | Moderator | Is the team settling on a decision? If yes, everyone gets a private agreement check and the Moderator says so in the chat. An explicit amendment to the open proposal starts a fresh vote for everyone. A different decision can replace it while fewer than half have answered. |
-| Team chat quiet for 60 s while brainstorming | Moderator, then the agents | The Moderator names a missing angle. Agents whose member has a related thought suggest sharing it. If nobody has one, the Moderator asks the team. Any member can also ask about an angle directly, or ask the Moderator to check agreement now. |
-| Everyone answered | Moderator | Compares answers without names. Same reading from everyone: "Agreed n/n" and it goes into the decision log. Otherwise: "Agreement k/n", one anonymous question, and what to do next. The next decision stated in the chat opens a new version; the host can also revise it or close the check. |
-
-Timing numbers live in `agents/rules.ts`.
-
-## Working on the agents
-
-Prompts are in `prompts/moderator/*.md` and `prompts/personal/*.md`. In moderator prompts, text above `=== INPUT ===` is the system prompt and text below is the input template. `<!-- comments -->` are not sent to the model.
+## Testing
 
 | Command | What it does |
 |---|---|
-| `npm test` | Agent unit tests, the meeting flow, and the whole server API, offline |
-| `npm run test:prompts -- --mock` | All prompt fixtures with offline models (checks the harness) |
-| `npm run test:moderator` / `npm run test:personal` | Fixtures with the real model (needs the key) |
-| `npm run test:prompts -- --dry-run --only <id>` | Print exactly what the model receives |
-| `npm run simulate -- <scenario.json>` | A whole meeting in the terminal; ends with a privacy check |
+| `npm test` | Unit, meeting-flow and API tests with offline fixture models |
 | `npm run typecheck` | Web app and server types |
-
-## Changes from the team's agent repository
-
-The engine started as a copy of `naajeehxe/CS40703_Xmas` at `0b60de5` (also the source of `tests/scenarios/jeehye/` and `tests/eval_commitment.ts`). This repository changes it to fix problems found in the two-UI test report:
-
-- `agents/personal.ts`: a reply with both a concern and a draft keeps the concern instead of failing (the cause of the 503s and lost messages); invalid output is retried once and the reason logged; an unsupported "agent's guess" is dropped instead of failing the card.
-- `agents/meeting.ts`:
-  - Detection also runs while a check is open, and an adopted change to that proposal opens a new version with zero answers and approvals. For unrelated new decisions, replacement is limited to checks that fewer than half have answered (`rules.supersedeBelowAnswered`).
-  - A mismatch closes the check with a next-step message. Agreement goes back to the idea stage, so the silence prompt works again.
-  - A decision already agreed is not checked again.
-  - Revisions and member proposals get a real question with several readings.
-  - New `cancelCheck` and `proposeDecision`.
-  - Private messages are kept when a new version opens.
-  - Suggestion cards pause during checks, with at most one open per member.
-  - Quoted replies reach the agents.
-- `agents/llm.ts`: `PERSONAL_LLM_MODEL` sets the Personal Agent model.
-- Prompts:
-  - `detect_decision.md`: not decisions (tone, preference, volunteering), already agreed or open checks, the group's main language, options taken from the chat.
-  - `chat.md`: product facts, short replies, "keep it in mind".
-  - `react.md`: no cards that only reinforce a position.
-- Tests: `tests/meeting-flow.test.ts` covers the changes above; two upstream assertions were updated to the new behaviour.
+| `npm run test:moderator` / `npm run test:personal` | Prompt fixtures against the real model (needs the key) |
+| `npm run test:prompts -- --dry-run --only <id>` | Print exactly what the model receives |
+| `npm run simulate -- <scenario.json>` | Play a whole meeting in the terminal, ending with a privacy check |
 
 ## Limits
 
-- One server process holds the meeting rooms in memory. After a restart, the team chat, schedule and decisions come back from `data/`, but private windows and open agreement checks start over.
-- Data is a single JSON file, which suits a class project; use a database for more users.
+- Meeting rooms live in one server process. After a restart, the team chat, schedule and decisions come back from `DATA_DIR`, but private windows and open checks start over.
+- Data is one JSON file, which suits a class project; use a database for more users.
+- Language handling distinguishes Korean and English only.
