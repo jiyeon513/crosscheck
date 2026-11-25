@@ -16,7 +16,7 @@ import * as personal from "./personal";
 import { DEFAULT_RULES, type Rules } from "./rules";
 import { AgentsTable, type TableHost } from "./table";
 // A stronger model reviews a check before it opens and the follow-up after a split (off unless CRITIC_LLM_MODEL is set).
-import { compareUnderstandingReviewed, detectDecisionReviewed } from "./critic";
+import { compareUnderstandingReviewed, detectDecisionReviewed, reviewCheck } from "./critic";
 import { isUnsure, norm } from "./format";
 import { TEAM_QUESTION_NOTICE } from "./protocol";
 import type {
@@ -457,27 +457,45 @@ export class Meeting {
   }
 
   /** Classify each post once so a team question is not also handled as an ordinary reaction. */
-  private async runDetect(trigger: "new_message" | "host_request", post?: { message: GroupMessage; sender: string }): Promise<void> {
+  private async runDetect(trigger: "new_message" | "host_request", post?: { message: GroupMessage; sender: string }, again = false): Promise<void> {
     const previous = this.check;
     const open = this.checkOpen() ? this.check : null;
     const historyLength = this.group.length;
     const group = this.groupContext(this.group.filter(isDecisionContext));
     const agreed = this.agreedRecords();
+    const input = {
+      goal: this.goal, group, trigger, openProposal: open?.decision ?? null,
+      agreed: agreed.map(record => record.statement), underDiscussion: this.discussing?.decision ?? null,
+    };
     let d: DecisionDetection;
     try {
-      d = await detectDecisionReviewed({
-        goal: this.goal, group, trigger, openProposal: open?.decision ?? null,
-        agreed: agreed.map(record => record.statement), underDiscussion: this.discussing?.decision ?? null,
-      }, this.llmLog("moderator"));
+      // The critic reviews later, only when a check is about to open (reviewBeforeOpening).
+      d = await moderator.detectDecision(input, this.llmLog("moderator"));
     } catch (error) {
       // Personal Agents can still react to ordinary discussion if the Moderator is unavailable.
       if (post && !open && this.check === previous) await this.runReactions(post.message, post.sender);
       throw error;
     }
+    // A check opened while this message was being read: read it once more against that check, so a change
+    // asked for in the meantime is not lost.
+    if (this.check !== previous && post && !again && this.checkOpen()) return this.runDetect(trigger, post, true);
     if (this.check !== previous || (open && open.status !== "collecting")) return;
 
+    // The team wants to change the proposal being checked: stop collecting answers to the old wording,
+    // so they can never agree it by default, and follow the discussion instead.
+    if (!d.is_decision && open && d.open_challenged) {
+      this.holdCheck(open);
+      return;
+    }
+
     if (!d.is_decision && !d.challenged) {
-      if (!post || open) return;
+      if (!post || open) {
+        // A member pressed "Check agreement now": say so rather than doing nothing.
+        if (trigger === "host_request" && !open) {
+          this.moderatorSays("I could not find a clear proposal to check yet. Say it in one sentence, or drag a message into the Decision log.", { type: "no_proposal" });
+        }
+        return;
+      }
       const { message, sender } = post;
       if (this.stage === "ideation" && d.invitation_quote && message.text.includes(d.invitation_quote)) {
         // Use the actual public wording and display name, including for anonymous posts.
@@ -502,19 +520,42 @@ export class Meeting {
       // One extra qualifier can change the proposal even when the new text contains the old text.
       const wording = norm(d.decision);
       if (wording === norm(open.decision) || agreed.some(record => norm(record.statement) === wording)) return;
-      await this.openCheck(d, open.replaces);
+      const revised = await this.reviewBeforeOpening(input, d, previous);
+      if (revised) await this.openCheck(revised, open.replaces);
       return;
     }
     if (this.alreadyAgreed(d.decision)) {
       if (this.discussing?.recordId) this.discussing = null;
       return;
     }
-    if (open) {
-      if (sameText(open.decision, d.decision)) return;
-      const answered = Object.keys(open.answers).length;
-      if (trigger !== "host_request" && answered / open.askedOf.length >= this.rules.supersedeBelowAnswered) return;
-    }
-    await this.openCheck(d, this.discussing?.recordId);
+    // The team settled a different version while answers were coming in: the answers so far were about the
+    // old wording, so the old check closes without a result and the new version is checked.
+    if (open && sameText(open.decision, d.decision)) return;
+    const reviewed = await this.reviewBeforeOpening(input, d, previous);
+    if (reviewed) await this.openCheck(reviewed, this.discussing?.recordId);
+  }
+
+  /**
+   * The critic (when enabled) reviews a check just before it opens, after every rule above, so it never
+   * delays or drops detection. Nothing opens if the critic calls it off or another check opened meanwhile.
+   */
+  private async reviewBeforeOpening(input: Parameters<typeof reviewCheck>[0], d: DecisionDetection, previous: Check | null) {
+    const reviewed = await reviewCheck(input, d, this.llmLog("moderator"));
+    return reviewed.is_decision && this.check === previous ? reviewed : null;
+  }
+
+  /** Close the open check without a result and treat its proposal as under discussion. */
+  private holdCheck(check: Check): void {
+    check.status = "cancelled";
+    this.closeCheckCards(check);
+    this.discussing = { decision: check.decision, status: "open", ...(check.replaces ? { recordId: check.replaces } : {}) };
+    this.moderatorSays(
+      `It sounds like the team may change "${check.decision}", so I stopped collecting answers. ` +
+        "When you settle on a version, even the same one, say it here and I will check it with everyone again.",
+      { type: "check_closed" },
+    );
+    // As after a split: no agreement, the proposal is under discussion, so the agents' table is offered.
+    this.table.offer(check);
   }
 
   /** The Moderator asks, without naming anyone, whether the team wants to revisit an agreed decision. */
@@ -863,7 +904,7 @@ export class Meeting {
 
 // Public delivery receipts are not new decision evidence.
 function isDecisionContext(message: GroupMessage): boolean {
-  return message.note?.type !== "angle_requested";
+  return message.note?.type !== "angle_requested" && message.note?.type !== "no_proposal";
 }
 
 /** How agents see attachments: names and kinds only, never the file contents. */

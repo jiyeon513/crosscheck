@@ -19,6 +19,8 @@ export type ModeratorNote =
   | { type: "angle_requested" }
   | { type: "check_opened"; version: number }
   | { type: "check_closed" }
+  /** "Check agreement now" found nothing to check. */
+  | { type: "no_proposal" }
   /** The Moderator asks whether to revisit an agreed decision. Members answer with buttons. */
   | { type: "reopen_prompt"; recordId: string; decision: string }
   | { type: "reopen_result"; reopened: boolean }
@@ -123,6 +125,8 @@ export type DecisionDetection = {
   reason: string;
   /** 1-based number of an already agreed decision that the newest message questions or wants to change; 0 if none. */
   challenged?: number;
+  /** The newest message questions or wants to change the proposal that is being checked now, without settling a new version. */
+  open_challenged?: boolean;
 };
 
 export type Comparison = {

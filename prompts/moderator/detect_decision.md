@@ -38,6 +38,8 @@ A decision "Under discussion" is one the team is talking about again (their answ
 
 When the newest message questions, disagrees with or wants to change one of the decisions in "Already agreed in this meeting" without itself settling a new version ("Actually, I'm not sure the cafeteria works", "Can we rethink the deadline?"), set "challenged" to that decision's number and "is_decision" to false. Otherwise "challenged" is 0.
 
+When there is an "Open check" and the newest message questions it or wants to change it without itself settling a new version ("Could we push it to Saturday instead?", "Wait, I'm not sure about Qualtrics"), set "open_challenged" to true and "is_decision" to false. Asking what the proposal means, or agreeing with it, is not a challenge. Otherwise "open_challenged" is false.
+
 When it is a decision, prepare a private check for the members. People often agree to the same words while picturing different things, so find where that could happen here.
 - "decision": one neutral sentence that restates what was decided, in the team's own words. If the team gives an exact sentence to submit, use that sentence verbatim. Add nothing that was not said. When the newest message refers back ("like that", "that one") and the chat offered more than one version, do not pick one: keep the decision as open as the team left it, and make that open part the ambiguity.
 - "ambiguity": the one aspect most likely to be understood differently, in 1 to 4 words (for example scope, what is shown, deliverable, deadline, owner, amount). Choose it in this order:
@@ -60,6 +62,7 @@ Reply with one JSON object and nothing else:
   "question": "",
   "options": [],
   "challenged": 0,
+  "open_challenged": false,
   "reason": "one short sentence for the developers"
 }
 When "is_decision" is false, leave decision, ambiguity, question and options empty. Before returning a revision, verify that revision_quote communicates a choice on behalf of the team. If it merely tells others what the speaker personally thought the proposal meant, return is_decision=false and clear revision_quote.

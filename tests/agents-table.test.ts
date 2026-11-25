@@ -169,6 +169,23 @@ test("table: an agent that does not answer in time is skipped", async () => {
   assert.deepEqual(findPrivacyLeaks(m), []);
 });
 
+test("table: after a check is put on hold, the table is offered when at least two members had answered", async () => {
+  const m = new Meeting({ goal: "Campus app proposal", host: "Minsu" });
+  m.join("Soyeon");
+  m.join("Taeho");
+  await m.postGroupMessage("Minsu", "Let's go with crowding prediction.");
+  const check = m.check!;
+  await m.answerCheck("Minsu", check.id, check.options[0], true);
+  await m.answerCheck("Soyeon", check.id, check.options[1], true);
+  await m.postGroupMessage("Taeho", "Could we change it to something smaller instead?");
+  assert.equal(check.status, "cancelled");
+  assert.equal(m.table.threads.at(-1)!.status, "offered");
+  assert.equal(m.table.threads.at(-1)!.checkId, check.id);
+  // A new version from the chat ends the offer, as after a split.
+  await m.postGroupMessage("Minsu", "OK, let's go with crowding prediction for the library only.");
+  assert.equal(m.table.threads.at(-1)!.status, "closed");
+});
+
 test("membrane: what needs the member's approval before it leaves their agent", () => {
   const notes = [{ id: "p1", text: "I'm commuting from Daejeon Station on Tuesdays" }, { id: "p2", text: "too risky" }];
   const base = { evidenceIds: [], privateNotes: notes, publicTexts: ["Let's do the library and cafeteria."], names: ["Minsu", "Taeho"] };

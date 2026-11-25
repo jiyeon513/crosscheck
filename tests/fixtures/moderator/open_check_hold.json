@@ -1,0 +1,88 @@
+[
+  {
+    "id": "hold_push_to_saturday",
+    "fn": "moderator.detectDecision",
+    "note": "A request to change the open proposal, without settling a new version: the check goes on hold.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will run the survey on Friday.",
+      "group": [
+        { "author": "Minsu", "text": "Let's run the survey on Friday." },
+        { "author": "Moderator", "kind": "moderator", "text": "Agreement check: \"We will run the survey on Friday.\" Please answer privately in your own window." },
+        { "author": "Taeho", "text": "Could we push it to Saturday instead? Friday is packed for me." }
+      ]
+    },
+    "expect": { "is_decision": false, "open_challenged": true }
+  },
+  {
+    "id": "hold_not_sure_tool",
+    "fn": "moderator.detectDecision",
+    "note": "Doubt about part of the open proposal: on hold.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will build the survey in Qualtrics.",
+      "group": [
+        { "author": "Soyeon", "text": "Let's build the survey in Qualtrics." },
+        { "author": "Moderator", "kind": "moderator", "text": "Agreement check: \"We will build the survey in Qualtrics.\" Please answer privately in your own window." },
+        { "author": "Taeho", "text": "Wait, I'm not sure about Qualtrics. Do we even have a license?" }
+      ]
+    },
+    "expect": { "is_decision": false, "open_challenged": true }
+  },
+  {
+    "id": "no_hold_meaning_question",
+    "fn": "moderator.detectDecision",
+    "note": "Asking what the proposal means is not a challenge: the check keeps collecting answers.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will run the survey on Friday.",
+      "group": [
+        { "author": "Minsu", "text": "Let's run the survey on Friday." },
+        { "author": "Moderator", "kind": "moderator", "text": "Agreement check: \"We will run the survey on Friday.\" Please answer privately in your own window." },
+        { "author": "Taeho", "text": "Does Friday mean the morning or the whole day?" }
+      ]
+    },
+    "expect": { "is_decision": false, "open_challenged": false }
+  },
+  {
+    "id": "no_hold_agreement",
+    "fn": "moderator.detectDecision",
+    "note": "Agreeing with the open proposal is not a challenge.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will run the survey on Friday.",
+      "group": [
+        { "author": "Minsu", "text": "Let's run the survey on Friday." },
+        { "author": "Moderator", "kind": "moderator", "text": "Agreement check: \"We will run the survey on Friday.\" Please answer privately in your own window." },
+        { "author": "Soyeon", "text": "Friday works for me." }
+      ]
+    },
+    "expect": { "is_decision": false, "open_challenged": false }
+  },
+  {
+    "id": "no_hold_settled_revision",
+    "fn": "moderator.detectDecision",
+    "note": "Settling the change is a revision of the open check, not a hold.",
+    "mock": "skip",
+    "input": {
+      "goal": "Plan the user survey",
+      "trigger": "new_message",
+      "openProposal": "We will run the survey on Friday.",
+      "group": [
+        { "author": "Minsu", "text": "Let's run the survey on Friday." },
+        { "author": "Moderator", "kind": "moderator", "text": "Agreement check: \"We will run the survey on Friday.\" Please answer privately in your own window." },
+        { "author": "Taeho", "text": "Could we push it to Saturday instead?" },
+        { "author": "Minsu", "text": "OK, let's move the survey to Saturday then." }
+      ]
+    },
+    "expect": { "is_decision": true, "open_challenged": false, "decision": { "includes_any": ["saturday"] } }
+  }
+]

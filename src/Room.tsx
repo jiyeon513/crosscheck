@@ -390,6 +390,7 @@ const NOTE_LABEL: Record<string, string> = {
   agreement_count: "Not agreed yet",
   check_opened: "Agreement check",
   check_closed: "Check closed",
+  no_proposal: "Nothing to check yet",
   reopen_prompt: "Revisit a decision?",
 };
 

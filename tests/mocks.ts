@@ -13,8 +13,15 @@ import { criticFixture } from "./critic-mocks";
 const userTexts = (turns: PrivateTurn[]) => turns.filter((t) => t.role === "user").map((t) => t.text);
 
 // These fixtures exercise the same response validation as live calls.
-export function enableFixtureModels() {
-  useFixtureGenerator((prompt, context) => {
+// delays: milliseconds per prompt, to test what happens while a model call is still running.
+export function enableFixtureModels(delays: Record<string, number> = {}) {
+  useFixtureGenerator(async (prompt, context) => {
+    if (delays[prompt]) await new Promise((resolve) => setTimeout(resolve, delays[prompt]));
+    return fixtureResponse(prompt, context);
+  });
+}
+
+export function fixtureResponse(prompt: string, context: object): unknown {
     if (prompt.startsWith("personal/table_") || prompt === "moderator/propose_bridge") return tableFixture(prompt, context);
     if (prompt.startsWith("moderator/critic_")) return criticFixture(prompt, context);
     switch (prompt) {
@@ -40,7 +47,6 @@ export function enableFixtureModels() {
       }
       default: throw new Error("Unregistered test prompt: " + prompt);
     }
-  });
 }
 
 // ---------- moderator ----------
@@ -63,11 +69,17 @@ export function findMissingAngle(input: MissingAngleInput): MissingAngle {
 const DECISION_RE =
   /\b(let'?s (go with|just do|do|pick|choose)|we('ll| will) go with|so we('re| are) (doing|going with)|we decided|it'?s decided)\b|로 가자|로 하자|로 정하자|으로 결정/i;
 
+const CHANGE_RE = /\b(could we|can we|maybe we should)\b.*\b(instead|move|push|change)\b|미뤄도|바꿀 수/i;
+
 export function detectDecision(input: DetectDecisionInput): DecisionDetection {
   const users = input.group.filter((m) => m.kind !== "moderator");
   const newest = users[users.length - 1];
   const none: DecisionDetection = { is_decision: false, decision: "", ambiguity: "", question: "", options: [], reason: "mock: no decision phrase" };
   if (!newest) return none;
+  // Someone wants to change the proposal being checked, without settling a new version.
+  if (input.openProposal && input.trigger !== "host_request" && !DECISION_RE.test(newest.text) && CHANGE_RE.test(newest.text)) {
+    return { ...none, open_challenged: true, reason: "mock: wants to change the open proposal" };
+  }
   if (input.trigger !== "host_request" && !DECISION_RE.test(newest.text)) {
     return { ...none, invitation_quote: newest.text.match(/what (else|other) (could|can|campus).*$/i)?.[0] ?? "" };
   }

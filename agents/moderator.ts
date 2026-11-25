@@ -72,8 +72,11 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
     (!questionMark.test(newest.text) || questionMark.test(invitation)) ? invitation : "";
   const options = strList(data.options).slice(0, 4);
   const ok = Boolean(data.is_decision) && str(data.decision).length > 0;
-  // The "not sure" option follows the options' language.
-  if (ok && !options.some(isUnsure)) options.push(/[\uac00-\ud7a3]/.test(options.join(" ")) ? "아직 잘 모르겠어요" : "Not sure yet");
+  // The "not sure" option follows the options' language, also when the model wrote it in the wrong one.
+  const korean = /[\uac00-\ud7a3]/.test(options.filter((o) => !isUnsure(o)).join(" "));
+  const unsure = korean ? "아직 잘 모르겠어요" : "Not sure yet";
+  for (let i = 0; i < options.length; i++) if (isUnsure(options[i]) && /[\uac00-\ud7a3]/.test(options[i]) !== korean) options[i] = unsure;
+  if (ok && !options.some(isUnsure)) options.push(unsure);
   return {
     is_decision: ok,
     invitation_quote: !ok && input.trigger === "new_message" && !input.openProposal ? groundedInvitation : "",
@@ -87,6 +90,7 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
     // Only a real number from the agreed list counts, and only when this is not itself a new decision.
     challenged: !ok && Number.isInteger(data.challenged) && data.challenged! >= 1 && data.challenged! <= (input.agreed?.length ?? 0)
       ? data.challenged : 0,
+    open_challenged: !ok && Boolean(input.openProposal?.trim()) && data.open_challenged === true,
   };
 }
 
