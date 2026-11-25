@@ -1,8 +1,9 @@
 // The critic: a stronger model reviews a check before it opens and the follow-up after a split, when code checks
 // find a problem or a risk. A correction is used only if it passes the same checks. It reads only the public chat.
-// Off unless CRITIC_LLM_MODEL is set; CRITIC_MODE is "risk" (default), "always" or "off".
+// CRITIC_LLM_MODEL picks the model (DEFAULT_CRITIC_MODEL if unset); CRITIC_MODE is "risk" (default), "always" or "off".
+// With fixture models (tests) it stays off unless CRITIC_LLM_MODEL is set.
 
-import { callJSON, type LLMRecord } from "./llm";
+import { callJSON, settings, type LLMRecord } from "./llm";
 import { formatChat, formatList, isUnsure, norm, str, strList } from "./format";
 import * as moderator from "./moderator";
 import type { CompareInput, DetectDecisionInput } from "./moderator";
@@ -10,10 +11,13 @@ import type { Comparison, DecisionDetection } from "./protocol";
 
 type Log = (record: LLMRecord) => void;
 
-export function criticSettings(): { model: string | null; mode: "off" | "risk" | "always" } {
-  const model = process.env.CRITIC_LLM_MODEL?.trim() || null;
+/** The critic's model when CRITIC_LLM_MODEL is not set. */
+export const DEFAULT_CRITIC_MODEL = "anthropic/claude-opus-5.5";
+
+export function criticSettings(mock = settings().mock): { model: string | null; mode: "off" | "risk" | "always" } {
+  const model = process.env.CRITIC_LLM_MODEL?.trim() || (mock ? null : DEFAULT_CRITIC_MODEL);
   const mode = process.env.CRITIC_MODE;
-  return { model, mode: !model ? "off" : mode === "always" || mode === "off" ? mode : "risk" };
+  return { model, mode: !model || mode === "off" ? "off" : mode === "always" ? "always" : "risk" };
 }
 
 const GENERIC = /as stated|understood it differently/i;
