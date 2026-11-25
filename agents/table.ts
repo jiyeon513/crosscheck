@@ -45,7 +45,7 @@ export type TableHost = {
   /** The Moderator posts in the team chat; returns the message id. */
   say(text: string): string;
   checkOpen(): boolean;
-  /** Open an agreement check on the bridge, as the next version of the split one. */
+  /** Open an agreement check on the bridge, as the next version of the split one (or next in line, if a check is open). */
   openBridgeCheck(thread: TableThread): Promise<void>;
   log(type: TraceEvent["type"], from: string, to: string, data: Record<string, unknown>): void;
   llmLog(who: string): Log;
@@ -335,7 +335,7 @@ export class AgentsTable {
     h.say(by === "agents"
       ? `From the agents’ table: the agents settled on a change one of them proposed, “${wording}”. Each of you now confirms it privately.`
       : `From the agents’ table: every agent that answered could accept “${wording}”. Each of you now confirms it privately.`);
-    if (!h.checkOpen()) await h.openBridgeCheck(thread);
+    await h.openBridgeCheck(thread);
   }
 
   private end(thread: TableThread, status: TableThread["status"]): void {

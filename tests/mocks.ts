@@ -92,8 +92,18 @@ export function detectDecision(input: DetectDecisionInput): DecisionDetection {
     options: aboutScope
       ? ["Library and cafeteria only", "The whole campus", "Not sure yet"]
       : ["Yes, as stated", "I understood it differently", "Not sure yet"],
+    replaces_open: Boolean(input.openProposal) && aboutSameQuestion(input.openProposal!, newest.text),
     reason: "mock: decision phrase found",
   };
+}
+
+// "instead", or a content word shared with the open proposal, means the same question.
+const COMMON = new Set(["let's", "lets", "going", "proposed", "chat", "with", "then", "this", "that", "there"]);
+function aboutSameQuestion(open: string, text: string): boolean {
+  if (/\binstead\b|말고/i.test(text)) return true;
+  const words = (s: string) => new Set(s.toLowerCase().split(/[^\p{L}\p{N}']+/u).filter((w) => w.length >= 5 && !COMMON.has(w)));
+  const a = words(open);
+  return [...words(text)].some((w) => a.has(w));
 }
 
 export function compareUnderstanding(input: CompareInput): Comparison {

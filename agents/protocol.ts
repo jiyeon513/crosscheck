@@ -21,6 +21,8 @@ export type ModeratorNote =
   | { type: "check_closed" }
   /** "Check agreement now" found nothing to check. */
   | { type: "no_proposal" }
+  /** A decision about something else waits until the open check is done. */
+  | { type: "check_queued" }
   /** The Moderator asks whether to revisit an agreed decision. Members answer with buttons. */
   | { type: "reopen_prompt"; recordId: string; decision: string }
   | { type: "reopen_result"; reopened: boolean }
@@ -127,6 +129,8 @@ export type DecisionDetection = {
   challenged?: number;
   /** The newest message questions or wants to change the proposal that is being checked now, without settling a new version. */
   open_challenged?: boolean;
+  /** While a check is open: this decision is about the same question as the open proposal (not something separate). */
+  replaces_open?: boolean;
 };
 
 export type Comparison = {

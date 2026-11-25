@@ -186,6 +186,43 @@ test("table: after a check is put on hold, the table is offered when at least tw
   assert.equal(m.table.threads.at(-1)!.status, "closed");
 });
 
+test("a decision about something else waits for a nearly finished check; so does the agents' wording", async () => {
+  const m = new Meeting({ goal: "Campus app proposal", host: "Minsu" });
+  m.join("Soyeon");
+  m.join("Taeho");
+  await m.postGroupMessage("Minsu", "Let's go with crowding prediction.");
+  const scope = m.check!;
+  const narrow = scope.options.find((o) => /library/i.test(o))!, wide = scope.options.find((o) => /whole/i.test(o))!;
+  await m.answerCheck("Minsu", scope.id, narrow, true);
+  await m.answerCheck("Soyeon", scope.id, narrow, true);
+
+  // Two of three answered; Taeho settles something unrelated. The scope check is not thrown away.
+  await m.postGroupMessage("Taeho", "Let's go with Figma for the slides.");
+  assert.equal(m.check, scope);
+  assert.equal(scope.status, "collecting");
+  assert.equal(m.group.at(-1)!.note?.type, "check_queued");
+
+  // The scope check ends (split): the table is offered, and the waiting decision opens without closing the table.
+  await m.answerCheck("Taeho", scope.id, wide, false);
+  assert.equal(scope.status, "mismatch");
+  const figma = m.check!;
+  assert.match(figma.decision, /Figma/);
+  assert.equal(figma.status, "collecting");
+  const thread = m.table.threads.at(-1)!;
+  assert.equal(thread.status, "offered");
+
+  // The agents settle a wording while the Figma check is open: it waits instead of being lost.
+  await m.table.start("Taeho", thread.id);
+  assert.equal(thread.status, "bridged");
+  assert.equal(m.check, figma);
+  assert.equal(m.group.at(-1)!.note?.type, "check_queued");
+  for (const u of ["Minsu", "Soyeon", "Taeho"]) await m.answerCheck(u, figma.id, figma.options[0], true);
+  assert.equal(figma.status, "aligned");
+  // Then the agents' wording is checked with everyone.
+  assert.equal(m.check!.decision, thread.bridge);
+  assert.equal(m.check!.status, "collecting");
+});
+
 test("membrane: what needs the member's approval before it leaves their agent", () => {
   const notes = [{ id: "p1", text: "I'm commuting from Daejeon Station on Tuesdays" }, { id: "p2", text: "too risky" }];
   const base = { evidenceIds: [], privateNotes: notes, publicTexts: ["Let's do the library and cafeteria."], names: ["Minsu", "Taeho"] };

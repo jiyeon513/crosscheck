@@ -82,6 +82,8 @@ export class Meeting {
   /** Agreed decisions the team chose to keep when asked, and the group length at that moment. */
   private kept = new Map<string, number>();
   private comparison?: { check: Check; inputs: string };
+  /** Decisions about something else that wait for the open check to end. */
+  private nextChecks: { d: Pick<DecisionDetection, "decision" | "question" | "options"> & { ambiguity?: string }; replaces?: string }[] = [];
   private lastCompared = "";
   private seq = 0;
   private now: () => number;
@@ -262,6 +264,7 @@ export class Meeting {
     this.stage = "ideation";
     this.discussing = null;
     this.moderatorSays("The host closed this agreement check. Carry on.", { type: "check_closed" });
+    void this.openNextCheck().catch((error) => console.error("[CrossCheck] could not open the next check:", error));
   }
 
   /** Any member: put a proposal to the team. The Moderator opens an agreement check on exactly this text. */
@@ -531,8 +534,31 @@ export class Meeting {
     // The team settled a different version while answers were coming in: the answers so far were about the
     // old wording, so the old check closes without a result and the new version is checked.
     if (open && sameText(open.decision, d.decision)) return;
+    // A decision about something else does not throw away a check most members already answered: it is checked
+    // next. Early on it replaces the open check, which may have been a false alarm.
+    if (open && !d.replaces_open && Object.keys(open.answers).length / open.askedOf.length >= this.rules.supersedeBelowAnswered) {
+      const next = await this.reviewBeforeOpening(input, d, previous);
+      if (next) this.queueCheck(next);
+      return;
+    }
     const reviewed = await this.reviewBeforeOpening(input, d, previous);
     if (reviewed) await this.openCheck(reviewed, this.discussing?.recordId);
+  }
+
+  /** A decision that waits for the open check to end. */
+  private queueCheck(d: Pick<DecisionDetection, "decision" | "question" | "options"> & { ambiguity?: string }, replaces?: string): void {
+    if (this.nextChecks.some((q) => sameText(q.d.decision, d.decision))) return;
+    this.nextChecks.push({ d, ...(replaces ? { replaces } : {}) });
+    this.moderatorSays(`Noted: "${d.decision}". I will check it with everyone as soon as the current check is done.`, { type: "check_queued" });
+  }
+
+  /** After a check ends, the next waiting decision is checked. An agents' table on the earlier topic keeps going. */
+  private async openNextCheck(): Promise<void> {
+    while (!this.checkOpen() && this.nextChecks.length) {
+      const next = this.nextChecks.shift()!;
+      if (this.alreadyAgreed(next.d.decision)) continue;
+      await this.openCheck(next.d, next.replaces, { keepTable: true });
+    }
   }
 
   /**
@@ -556,6 +582,7 @@ export class Meeting {
     );
     // As after a split: no agreement, the proposal is under discussion, so the agents' table is offered.
     this.table.offer(check);
+    void this.openNextCheck().catch((error) => console.error("[CrossCheck] could not open the next check:", error));
   }
 
   /** The Moderator asks, without naming anyone, whether the team wants to revisit an agreed decision. */
@@ -590,7 +617,8 @@ export class Meeting {
     }
   }
 
-  private async openCheck(d: Pick<DecisionDetection, "decision" | "question" | "options">, replaces?: string): Promise<void> {
+  private async openCheck(d: Pick<DecisionDetection, "decision" | "question" | "options">, replaces?: string,
+    options: { keepTable?: boolean } = {}): Promise<void> {
     const previous = this.check;
     const replacing = previous?.status === "collecting";
     if (previous && replacing) previous.status = "cancelled";
@@ -616,7 +644,7 @@ export class Meeting {
       createdAt: this.now(),
       ...(replaces ? { replaces } : {}),
     };
-    this.table.closeOpen();
+    if (!options.keepTable) this.table.closeOpen();
     this.check = check;
     this.discussing = null;
     this.lastCompared = "";
@@ -720,6 +748,7 @@ export class Meeting {
       if (this.comparison === job) this.comparison = undefined;
     }
     if (split) this.table.offer(check);
+    await this.openNextCheck();
   }
 
   // =====================================================================
@@ -872,10 +901,15 @@ export class Meeting {
         return line.id;
       },
       checkOpen: () => this.checkOpen(),
-      openBridgeCheck: (thread) => this.openCheck({
-        decision: thread.bridge!, question: "Does this wording work for you?",
-        options: ["Yes, this works for me", "It does not work for me", "Not sure yet"],
-      }, thread.replaces),
+      openBridgeCheck: async (thread) => {
+        const bridge = {
+          decision: thread.bridge!, question: "Does this wording work for you?",
+          options: ["Yes, this works for me", "It does not work for me", "Not sure yet"],
+        };
+        // Another check is open: the agents' wording is checked next instead of being lost.
+        if (this.checkOpen()) this.queueCheck(bridge, thread.replaces);
+        else await this.openCheck(bridge, thread.replaces);
+      },
       log: (type, from, to, data) => this.log(type, from, to, data),
       llmLog: (who) => this.llmLog(who),
     };

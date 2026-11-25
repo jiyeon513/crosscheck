@@ -391,6 +391,7 @@ const NOTE_LABEL: Record<string, string> = {
   check_opened: "Agreement check",
   check_closed: "Check closed",
   no_proposal: "Nothing to check yet",
+  check_queued: "Checked next",
   reopen_prompt: "Revisit a decision?",
 };
 
