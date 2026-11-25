@@ -92,7 +92,6 @@ export async function detectDecision(input: DetectDecisionInput, log?: Log): Pro
     challenged: !ok && Number.isInteger(data.challenged) && data.challenged! >= 1 && data.challenged! <= (input.agreed?.length ?? 0)
       ? data.challenged : 0,
     open_challenged: !ok && Boolean(input.openProposal?.trim()) && data.open_challenged === true,
-    // A revision of the open proposal is always about the same question.
     replaces_open: ok && Boolean(input.openProposal?.trim()) && (data.replaces_open === true || Boolean(revision)),
   };
 }

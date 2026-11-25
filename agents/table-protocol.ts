@@ -1,20 +1,11 @@
-// The agents' table: how the Moderator and the Personal Agents look for one wording after a split check.
-// Its own contract, next to protocol.ts, so the table can change without touching the shared one.
+// The agents' table: the types shared by agents/table.ts and the UI.
 
-/** What a message does in the conversation. */
 export type SpeechAct = "ask" | "inform" | "propose" | "counter" | "accept" | "reject" | "justify" | "concede";
 
-/**
- * position: the Moderator and one agent alone. respond: each agent answers the wording on the table.
- * react: each agent supports (accept) or objects to (reject) the changes the other agents proposed.
- */
+/** position: the Moderator and one agent alone. respond and react: every agent, on the table. */
 export type TableStep = "position" | "respond" | "react";
 
-/**
- * private: between the Moderator and one agent; only that agent's member sees it.
- * table: seen by every agent; members see it without code names once the step is over.
- * Only a wording, an act and the change it is about can be on the table. Reasons never are.
- */
+/** private: one agent and the Moderator. table: every agent; members see it without code names. Reasons are never on the table. */
 export type TableScope = "private" | "table";
 
 export type TableMessage = {
@@ -26,20 +17,14 @@ export type TableMessage = {
   scope: TableScope;
   /** "Moderator" or a code name. Code names never leave the server. */
   from: string;
-  /** "Moderator", "all" or a code name. */
   to: string;
   act: SpeechAct;
-  /** Private messages and the Moderator's notes only. */
   text: string;
   /** A wording: the Moderator's proposal, an agent's change, or the change a reaction is about. */
   wording?: string;
-  /** The change a reaction is about. */
   target?: string;
-  /** Private: the member's answer to the split check, when it is one of the options. */
   reading?: string;
-  /** Private: what would make another reading acceptable to the member. */
   condition?: string;
-  /** The member approved this text first. */
   approved?: boolean;
 };
 
@@ -49,17 +34,13 @@ export type TableDraft = {
   threadId: string;
   round: number;
   step: TableStep;
-  /** What the agent answers. */
   prompt: string;
   act: SpeechAct;
   /** position: the reason for the Moderator. respond: the changed wording, if the act is counter. */
   text: string;
   condition?: string;
-  /** react: the agent's support (accept) or objection (reject) to each of the other agents' changes. */
   reactions?: { target: string; wording: string; act: "accept" | "reject" }[];
-  /** For the member only: what the agent based this on. */
   note?: string;
-  /** Why the member is asked first. */
   why?: string;
   status: "waiting" | "sent" | "declined" | "closed";
   /** Sent without asking, because it used nothing private. */
@@ -79,7 +60,6 @@ export type TableThread = {
   answers: Record<string, string>;
   /** Member -> code name. Never leaves the server. */
   aliases: Record<string, string>;
-  /** Members whose agent has not finished the current step. */
   waiting: string[];
   /** Member -> what their agent drafted. Each member sees only their own. */
   drafts: Record<string, TableDraft[]>;
@@ -90,14 +70,10 @@ export type TableThread = {
   /** offered: the check split and any member can start the table; nothing has been said yet. */
   status: "offered" | "talking" | "bridged" | "no_bridge" | "closed";
   messages: TableMessage[];
-  /** The wording on the table now. */
   wording?: string;
-  /** The Moderator's wordings, one per round from round 2. */
   wordings: { round: number; text: string; note: string }[];
   bridge?: string;
-  /** Who settled it: every agent accepted the Moderator's wording, or the agents backed one agent's change. */
   bridgedBy?: "moderator" | "agents";
-  /** The Moderator's team chat message that opened the table. */
   messageId?: string;
   createdAt: number;
   roundStartedAt: number;
@@ -108,13 +84,11 @@ export type TableRound = {
   round: number;
   wording: string;
   note: string;
-  /** False until every agent answered the wording. */
   answered: boolean;
   accepted: number;
   changed: number;
   rejected: number;
   silent: number;
-  /** False until every agent reacted to the changes. */
   reacted: boolean;
   changes: { id: string; wording: string; support: number; object: number }[];
 };

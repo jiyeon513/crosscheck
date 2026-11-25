@@ -1,18 +1,14 @@
-// The check every agent message passes before it reaches the agents' table. Code, not a prompt:
-// a message that draws on what the member said only in private waits for the member's approval.
+// Every agent message passes this check before it reaches the agents' table: if it draws on what the member
+// said only in private, it waits for the member's approval.
 
 export type MembraneInput = {
-  /** Everything the message would say (text and condition). */
   text: string;
-  /** What the agent cited for it (ids of the member's own turns and posts). */
   evidenceIds: string[];
   /** What the member said only in private: their turns with their agent, their memory, an own-words answer. */
   privateNotes: { id: string; text: string }[];
-  /** Everything already public: the team chat and the table. */
   publicTexts: string[];
   /** Member names. A code name stops meaning anything once a name appears. */
   names: string[];
-  /** How many words in a row count as repeating a note (default 4). */
   run?: number;
   /** Count a repeated run only if it adds a word that appears in none of the public texts (it reveals something new). */
   newWordsOnly?: boolean;
@@ -30,7 +26,6 @@ export function approvalReason(input: MembraneInput): string | null {
   const saidRuns = new Set(runs(said, n));
   for (const note of secret) {
     const w = words(note.text);
-    // A short note is private as a whole phrase.
     if (w.length < n ? w.length >= 2 && contains(said, w) && reveals(w.join(" ")) : runs(w, n).some((r) => saidRuns.has(r) && !publicRuns.has(r) && reveals(r))) {
       return "It repeats words you wrote privately.";
     }
@@ -42,7 +37,6 @@ export function approvalReason(input: MembraneInput): string | null {
   return null;
 }
 
-/** Words, with hyphenated words kept whole ("Wi-Fi", "building-by-building"). */
 function words(text: string): string[] {
   return text.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{N}-]+/u).map((w) => w.replace(/^-+|-+$/g, "")).filter(Boolean);
 }

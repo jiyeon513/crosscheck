@@ -82,7 +82,6 @@ export class Meeting {
   /** Agreed decisions the team chose to keep when asked, and the group length at that moment. */
   private kept = new Map<string, number>();
   private comparison?: { check: Check; inputs: string };
-  /** Decisions about something else that wait for the open check to end. */
   private nextChecks: { d: Pick<DecisionDetection, "decision" | "question" | "options"> & { ambiguity?: string }; replaces?: string }[] = [];
   private lastCompared = "";
   private seq = 0;
@@ -472,20 +471,17 @@ export class Meeting {
     };
     let d: DecisionDetection;
     try {
-      // The critic reviews later, only when a check is about to open (reviewBeforeOpening).
       d = await moderator.detectDecision(input, this.llmLog("moderator"));
     } catch (error) {
       // Personal Agents can still react to ordinary discussion if the Moderator is unavailable.
       if (post && !open && this.check === previous) await this.runReactions(post.message, post.sender);
       throw error;
     }
-    // A check opened while this message was being read: read it once more against that check, so a change
-    // asked for in the meantime is not lost.
+    // A check opened while this message was being read: read it again against that check.
     if (this.check !== previous && post && !again && this.checkOpen()) return this.runDetect(trigger, post, true);
     if (this.check !== previous || (open && open.status !== "collecting")) return;
 
-    // The team wants to change the proposal being checked: stop collecting answers to the old wording,
-    // so they can never agree it by default, and follow the discussion instead.
+    // A request to change the open proposal: stop collecting answers so the old wording can never be agreed by default.
     if (!d.is_decision && open && d.open_challenged) {
       this.holdCheck(open);
       return;
@@ -493,7 +489,6 @@ export class Meeting {
 
     if (!d.is_decision && !d.challenged) {
       if (!post || open) {
-        // A member pressed "Check agreement now": say so rather than doing nothing.
         if (trigger === "host_request" && !open) {
           this.moderatorSays("I could not find a clear proposal to check yet. Say it in one sentence, or drag a message into the Decision log.", { type: "no_proposal" });
         }
@@ -531,11 +526,9 @@ export class Meeting {
       if (this.discussing?.recordId) this.discussing = null;
       return;
     }
-    // The team settled a different version while answers were coming in: the answers so far were about the
-    // old wording, so the old check closes without a result and the new version is checked.
     if (open && sameText(open.decision, d.decision)) return;
-    // A decision about something else does not throw away a check most members already answered: it is checked
-    // next. Early on it replaces the open check, which may have been a false alarm.
+    // A different version of the open proposal replaces it. A decision about something else is checked next,
+    // unless few have answered (the open check may have been a false alarm).
     if (open && !d.replaces_open && Object.keys(open.answers).length / open.askedOf.length >= this.rules.supersedeBelowAnswered) {
       const next = await this.reviewBeforeOpening(input, d, previous);
       if (next) this.queueCheck(next);
@@ -545,7 +538,6 @@ export class Meeting {
     if (reviewed) await this.openCheck(reviewed, this.discussing?.recordId);
   }
 
-  /** A decision that waits for the open check to end. */
   private queueCheck(d: Pick<DecisionDetection, "decision" | "question" | "options"> & { ambiguity?: string }, replaces?: string): void {
     if (this.nextChecks.some((q) => sameText(q.d.decision, d.decision))) return;
     this.nextChecks.push({ d, ...(replaces ? { replaces } : {}) });
@@ -561,10 +553,7 @@ export class Meeting {
     }
   }
 
-  /**
-   * The critic (when enabled) reviews a check just before it opens, after every rule above, so it never
-   * delays or drops detection. Nothing opens if the critic calls it off or another check opened meanwhile.
-   */
+  /** The critic (when enabled) reviews a check only once it is about to open, so it never delays detection. */
   private async reviewBeforeOpening(input: Parameters<typeof reviewCheck>[0], d: DecisionDetection, previous: Check | null) {
     const reviewed = await reviewCheck(input, d, this.llmLog("moderator"));
     return reviewed.is_decision && this.check === previous ? reviewed : null;
@@ -906,7 +895,6 @@ export class Meeting {
           decision: thread.bridge!, question: "Does this wording work for you?",
           options: ["Yes, this works for me", "It does not work for me", "Not sure yet"],
         };
-        // Another check is open: the agents' wording is checked next instead of being lost.
         if (this.checkOpen()) this.queueCheck(bridge, thread.replaces);
         else await this.openCheck(bridge, thread.replaces);
       },

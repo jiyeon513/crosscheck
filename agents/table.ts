@@ -1,17 +1,7 @@
 // The agents' table: after a split check, the Moderator and the Personal Agents look for one wording everyone can accept.
-//
-//   check splits ─► offered; any member starts it
-//   position (private) ─► the Moderator asks each agent alone why its member answered that way; only the Moderator reads it
-//   respond  (table)   ─► the Moderator puts a wording on the table; each agent accepts it, proposes a change, or rejects it
-//   react    (table)   ─► each agent supports or objects to the other agents' changes
-//                      ─► every agent accepts a wording, or the agents back one change ─► a new check; members confirm it
-//                      ─► otherwise the Moderator words the next one, at most `bridgeRounds` times
-//
-// What can cross between agents is fixed by the message types, not by a prompt: a wording, an act, and the change it is
-// about. Reasons stay between one agent and the Moderator. Members see the table without code names, one finished step at a
-// time, so the wording and the timing do not tell who said what. Text that draws on a member's private notes waits for that
-// member's approval (membrane.ts); a Moderator wording that quotes a reason or repeats something never shared is re-asked or dropped.
-// Meeting (meeting.ts) owns the room; it reaches the table only through the hooks in TableHost.
+// Each agent first gives its member's reason to the Moderator alone; then the agents answer and amend one wording together.
+// Only a wording, an act and the change it is about cross between agents, and members see finished steps without code names.
+// Text drawn from a member's private notes waits for that member (membrane.ts). The meeting is reached only through TableHost.
 
 import { callJSON, callPersonalJSON, type LLMRecord } from "./llm";
 import { isUnsure, norm, str } from "./format";
@@ -31,18 +21,14 @@ export type TableRules = {
 
 export const DEFAULT_TABLE_RULES: TableRules = { bridgeRounds: 2, roundMs: 120_000 };
 
-/** What the table needs from the meeting. */
 export type TableHost = {
   goal: string;
   participants(): string[];
   now(): number;
   nextId(prefix: string): string;
   ownerContext(user: string): { user: string; goal: string; group: ChatLine[]; privateHistory: PrivateTurn[] };
-  /** What the member said only to their agent. */
   privateNotes(user: string): { id: string; text: string }[];
-  /** The team chat. */
   publicTexts(): string[];
-  /** The Moderator posts in the team chat; returns the message id. */
   say(text: string): string;
   checkOpen(): boolean;
   /** Open an agreement check on the bridge, as the next version of the split one (or next in line, if a check is open). */
@@ -74,7 +60,6 @@ export class AgentsTable {
     });
   }
 
-  /** Any member starts an offered table, with every member who answered the split check. */
   async start(user: string, threadId: string): Promise<void> {
     const h = this.host();
     if (!h.participants().includes(user)) throw new Error(`${user} has not joined this meeting`);
@@ -91,7 +76,6 @@ export class AgentsTable {
     await this.startStep(thread, "position");
   }
 
-  /** The member answers their agent's draft: send it (as edited), or send nothing. */
   async answer(user: string, draftId: string, send: boolean, finalText?: string): Promise<void> {
     const thread = this.threads.find((t) => t.drafts[user]?.some((d) => d.id === draftId));
     const draft = thread?.drafts[user].find((d) => d.id === draftId);
@@ -102,7 +86,6 @@ export class AgentsTable {
     }
     if (!send) {
       draft.status = "declined";
-      // Nothing is said for the member: the step counts them as silent.
       this.say(thread, { scope: draft.step === "position" ? "private" : "table", from: thread.aliases[user], to: "Moderator", act: "inform", text: "" }, `agent:${user}`);
       await this.leaveStep(thread, user);
       return;
@@ -143,10 +126,7 @@ export class AgentsTable {
     }));
   }
 
-  /**
-   * Texts the member approved, by who may read them: a reason went to the Moderator only, a change to everyone.
-   * The privacy check (findPrivacyLeaks) uses this; everything else the member said privately must reach nobody.
-   */
+  /** Texts the member approved, by reader (a reason: the Moderator only; a change: everyone). Used by findPrivacyLeaks. */
   consented(user: string, reader: string): string[] {
     const out: string[] = [];
     for (const t of this.threads) {
@@ -167,7 +147,6 @@ export class AgentsTable {
     thread.step = step;
     thread.roundStartedAt = h.now();
     const present = Object.keys(thread.aliases).filter((p) => h.participants().includes(p));
-    // In the react step, only agents that answered the wording and have someone else's change to react to.
     thread.waiting = step === "react"
       ? present.filter((p) => this.moves(thread, "respond").some((m) => m.from === thread.aliases[p] && m.act !== "inform") &&
           this.changes(thread).some((c) => c.from !== thread.aliases[p]))
@@ -295,7 +274,6 @@ export class AgentsTable {
     await next?.();
   }
 
-  /** The Moderator words the next proposal from the private positions and what happened on the table. */
   private async nextWording(thread: TableThread): Promise<void> {
     if (thread.wordings.length >= this.rules.bridgeRounds) return this.settle(thread, undefined);
     const h = this.host();
@@ -355,7 +333,6 @@ export class AgentsTable {
     return this.moves(thread, "respond").filter((m) => m.act === "counter" && m.wording);
   }
 
-  /** For the Moderator only: each agent's private reason, under its code name. */
   private positions(thread: TableThread) {
     return thread.messages.filter((m) => m.step === "position" && m.from !== "Moderator" && m.act !== "inform").map((m) => ({
       agent: m.from, reading: m.reading ?? "", text: m.text, condition: m.condition ?? "",
@@ -366,10 +343,7 @@ export class AgentsTable {
     return [...this.host().publicTexts(), ...this.threads.flatMap((t) => t.messages.filter((m) => m.scope === "table").map((m) => m.wording ?? ""))];
   }
 
-  /**
-   * A wording for everyone may use what members chose to tell the Moderator (that is what it is for), and freely the
-   * conditions they offered; it may not quote a reason, and may not repeat anything a member never shared at all.
-   */
+  /** A wording may use what members told the Moderator, but never quote a reason or repeat something never shared. */
   private leaksPrivate(thread: TableThread, text: string): boolean {
     const h = this.host();
     const told = thread.messages.filter((m) => m.scope === "private" && m.from !== "Moderator");
@@ -389,7 +363,6 @@ export class AgentsTable {
   }
 }
 
-/** Position step: the Moderator asks one agent, privately, why its member answered that way. */
 function positionAsk(thread: TableThread, user: string): string {
   const answer = thread.answers[user] ?? "";
   if (isUnsure(answer)) return "Your member is not sure yet. What would help them decide?";
@@ -446,9 +419,7 @@ function shuffle<T>(items: T[]): T[] {
   return a;
 }
 
-// =====================================================================
-// Model calls: prompts/personal/table_*.md and prompts/moderator/propose_bridge.md
-// =====================================================================
+// ---------- model calls (prompts/personal/table_*.md, prompts/moderator/propose_bridge.md) ----------
 
 type Owner = { user: string; goal: string; group: ChatLine[]; privateHistory: PrivateTurn[] };
 type Base = Owner & { decision: string; question: string; options: string[]; ownAnswer: string | null };
@@ -475,7 +446,6 @@ function payload(input: Base) {
   };
 }
 
-/** Run one agent call; invalid output is asked for once more, then fails. */
 async function agentCall<T>(prompt: string, input: Base, context: object, schema: object, log: Log | undefined, generate: Generate,
   check: (data: Record<string, unknown>) => T | string): Promise<T> {
   const ids = [...input.group, ...input.privateHistory].map((m) => m.id).filter((id): id is string => Boolean(id));
@@ -516,7 +486,6 @@ const evidenceIds = (data: Record<string, unknown>) => (data.evidence as { id: s
 const clean = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
 
 export type PositionInput = Base & { ask: string };
-/** Step 1, private: the owner's reason, for the Moderator only. */
 export function tablePosition(input: PositionInput, log?: Log, generate: Generate = callPersonalJSON) {
   return agentCall("personal/table_position", input, { moderator_message: input.ask }, positionSchema, log, generate, (data) => {
     const text = clean(data.text, 300);
@@ -534,7 +503,6 @@ export function tableRespond(input: RespondInput, log?: Log, generate: Generate 
     const wording = clean(data.wording, 300);
     const note = clean(data.note, 300) ?? "";
     if (!["accept", "counter", "reject"].includes(String(data.act))) return "unknown act";
-    // A change must actually change the wording.
     const act: SpeechAct = data.act === "counter" && (!wording || norm(wording) === norm(input.wording)) ? "reject" : data.act as SpeechAct;
     return { act, wording: act === "counter" ? wording : null, note, evidenceIds: evidenceIds(data) };
   });
@@ -563,7 +531,6 @@ export type ProposeBridgeInput = {
   positions: { agent: string; reading: string; text: string; condition: string }[];
   rounds: TableRound[];
   lastRound: boolean;
-  /** The last wording repeated something a member said only privately. */
   retry?: boolean;
 };
 

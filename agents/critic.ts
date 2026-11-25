@@ -1,13 +1,6 @@
-// The critic: a stronger model reviews what the Moderator is about to show the team, and only then.
-//
-//   Moderator draft (a check to open, or the follow-up after a split)
-//     ─► code checks (free): one reading only, "not specified", duplicates, wrong language, counts or names in a follow-up...
-//     ─► risk signals: the generic question with a real discussion behind it, a decision that resolves "like that"...
-//     ─► problems or risk (or CRITIC_MODE=always) ─► the critic model reviews it ─► "ok", or a corrected draft
-//     ─► a correction is used only if it passes the same code checks; otherwise the draft stands
-//
-// Off unless CRITIC_LLM_MODEL is set. CRITIC_MODE: "risk" (default when a model is set), "always" or "off".
-// The critic reads the same public chat as the Moderator and nothing else.
+// The critic: a stronger model reviews a check before it opens and the follow-up after a split, when code checks
+// find a problem or a risk. A correction is used only if it passes the same checks. It reads only the public chat.
+// Off unless CRITIC_LLM_MODEL is set; CRITIC_MODE is "risk" (default), "always" or "off".
 
 import { callJSON, type LLMRecord } from "./llm";
 import { formatChat, formatList, isUnsure, norm, str, strList } from "./format";
@@ -28,7 +21,6 @@ const hangul = (text: string) => /[가-힣]/.test(text);
 
 // ---------- a check about to open ----------
 
-/** Problems code can see in a drafted check. */
 export function checkProblems(input: DetectDecisionInput, d: DecisionDetection): string[] {
   if (!d.is_decision) return [];
   const problems: string[] = [];
@@ -45,7 +37,6 @@ export function checkProblems(input: DetectDecisionInput, d: DecisionDetection):
   return problems;
 }
 
-/** Signals that a draft may be wrong even though code sees no problem. */
 export function checkRisks(input: DetectDecisionInput, d: DecisionDetection): string[] {
   if (!d.is_decision) return [];
   const risks: string[] = [];
@@ -93,7 +84,6 @@ export async function reviewCheck(input: DetectDecisionInput, d: DecisionDetecti
   return checkProblems(input, revised).length ? d : revised;
 }
 
-/** Detection, then the critic before a check opens. */
 export async function detectDecisionReviewed(input: DetectDecisionInput, log?: Log): Promise<DecisionDetection> {
   return reviewCheck(input, await moderator.detectDecision(input, log), log);
 }

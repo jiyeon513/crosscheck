@@ -19,9 +19,7 @@ export type ModeratorNote =
   | { type: "angle_requested" }
   | { type: "check_opened"; version: number }
   | { type: "check_closed" }
-  /** "Check agreement now" found nothing to check. */
   | { type: "no_proposal" }
-  /** A decision about something else waits until the open check is done. */
   | { type: "check_queued" }
   /** The Moderator asks whether to revisit an agreed decision. Members answer with buttons. */
   | { type: "reopen_prompt"; recordId: string; decision: string }
