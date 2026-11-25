@@ -1,6 +1,6 @@
 // The agents' table in the UI: the table below the team chat (no names, finished steps only), and each member's own
 // agent in their private window. Everything here comes from view.table (agents/table-protocol.ts).
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { TableDraft, TableRound, ThreadView } from "../agents/table-protocol";
 import { AgentIcon, ModeratorIcon } from "./icons";
 import "./agents-table.css";
@@ -46,7 +46,7 @@ function TableOffer({ thread, act, onHide }: { thread: ThreadView; act: Act; onH
       </header>
       <p className="at-note">
         Each Personal Agent first tells the Moderator, alone, why its member read “{thread.decision}” that way. Then the agents
-        work on one wording together, without names. Anything from your private notes is sent only if you approve it.
+        work out one compromise together, without names. Anything from your private notes is sent only if you approve it.
       </p>
       <div className="at-actions">
         <button className="btn primary small" type="button" disabled={busy} onClick={() => run("table/start", { threadId: thread.id })}>
@@ -58,96 +58,160 @@ function TableOffer({ thread, act, onHide }: { thread: ThreadView; act: Act; onH
   );
 }
 
-function statusLine(thread: ThreadView): string {
-  if (thread.status === "bridged") {
-    return thread.bridgedBy === "agents" ? "The agents settled on one of their changes" : "Every agent accepted a wording";
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Where the table is, as four steps: 0 reasons, 1 compromise, 2 agents answer, 3 team check. */
+function currentStep(thread: ThreadView): number {
+  if (thread.status === "bridged") return 3;
+  if (thread.step === "position") return 0;
+  return thread.waitingFor ? 2 : 1;
+}
+
+const STEPS = ["Reasons", "Compromise", "Agents answer", "Team check"];
+
+function Steps({ thread }: { thread: ThreadView }) {
+  const now = currentStep(thread);
+  return (
+    <ol className="at-steps" aria-label="Progress">
+      {STEPS.map((label, i) => (
+        <li key={label} className={i < now ? "ok" : i === now ? "now" : ""} aria-current={i === now ? "step" : undefined}>
+          <span className="at-dot" aria-hidden="true">{i < now ? "✓" : i + 1}</span>
+          {label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** One circle per agent: ✓ accepted, ✎ suggested an edit, ✕ rejected, – no answer, … still answering. */
+function Votes({ round, agents, waitingFor }: { round: TableRound; agents: number; waitingFor?: number }) {
+  if (!round.answered) {
+    const answered = Math.max(0, agents - (waitingFor ?? agents));
+    return (
+      <p className="at-votes">
+        {Array.from({ length: agents }, (_, i) => (
+          <span key={i} className={`at-v ${i < answered ? "in" : "wait"}`} aria-hidden="true">{i < answered ? "•" : "…"}</span>
+        ))}
+        <span>{answered} of {agents} agents answered</span>
+      </p>
+    );
   }
-  if (thread.status === "no_bridge") return "No wording found yet";
-  const waiting = `waiting for ${thread.waitingFor} of ${thread.agents}`;
-  if (!thread.waitingFor) return "The Moderator is writing a wording";
-  if (thread.step === "position") return `Step 1 · the Moderator talks with each agent alone · ${waiting}`;
-  const n = thread.rounds.length;
-  return thread.step === "respond" ? `Wording ${n} · agents are answering · ${waiting}` : `Wording ${n} · agents are reacting to the changes · ${waiting}`;
+  const marks = [
+    ...Array(round.accepted).fill(["yes", "✓"]),
+    ...Array(round.changed).fill(["edit", "✎"]),
+    ...Array(round.rejected).fill(["no", "✕"]),
+    ...Array(round.silent).fill(["none", "–"]),
+  ] as [string, string][];
+  const total = marks.length || agents;
+  const parts = [
+    `${round.accepted} of ${total} ${round.accepted === 1 ? "agent accepts" : "agents accept"}`,
+    round.changed ? `${plural(round.changed, "suggested an edit", "suggested edits")}` : "",
+    round.rejected ? `${round.rejected} rejected it` : "",
+    round.silent ? `${round.silent} did not answer` : "",
+  ].filter(Boolean);
+  return (
+    <p className="at-votes">
+      {marks.map(([kind, mark], i) => (
+        <span key={i} className={`at-v ${kind}`} aria-hidden="true">{mark}</span>
+      ))}
+      <span>{parts.join(" · ")}</span>
+    </p>
+  );
+}
+
+function Edits({ round }: { round: TableRound }) {
+  if (!round.changes.length) return null;
+  return (
+    <ul className="at-edits">
+      {round.changes.map((change) => (
+        <li key={change.id}>
+          <p className="at-edit-text">
+            <b>Suggested edit:</b> “{change.wording}”
+          </p>
+          <p className="at-react">
+            {round.reacted ? (
+              <>
+                Other agents: <b className="yes">✓ {change.support} {change.support === 1 ? "agrees" : "agree"}</b>
+                <b className="no">✕ {change.object} {change.object === 1 ? "disagrees" : "disagree"}</b>
+              </>
+            ) : (
+              "The other agents are reacting."
+            )}
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Compromise({ round, label, thread, latest }: { round: TableRound; label: string; thread: ThreadView; latest: boolean }) {
+  return (
+    <article className={latest ? "at-card" : "at-card earlier"}>
+      <p className="at-kicker">{label}</p>
+      <p className="at-text-main">“{round.wording}”</p>
+      <Votes round={round} agents={thread.agents} waitingFor={latest ? thread.waitingFor : 0} />
+      <Edits round={round} />
+    </article>
+  );
 }
 
 function TableTalk({ thread, onHide }: { thread: ThreadView; onHide?: () => void }) {
-  const talking = thread.status === "talking";
-  const [open, setOpen] = useState(talking);
-  useEffect(() => {
-    if (!talking) setOpen(false);
-  }, [talking]);
+  const rounds = thread.rounds;
+  const latest = rounds[rounds.length - 1];
+  const done = thread.status === "bridged";
+  const stuck = thread.status === "no_bridge";
+  const earlier = done || stuck ? rounds : rounds.slice(0, -1);
   return (
     <section className={`agents-table ${thread.status}`} aria-label="Agents' table">
       <header className="at-head">
         <ModeratorIcon size={15} />
         <strong>Agents’ table</strong>
-        <span className={`at-status ${thread.status}`}>{statusLine(thread)}</span>
-        <button className="at-toggle" type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
-          {open ? "Hide" : "Show the table"}
-        </button>
+        <span
+          className="at-lock"
+          tabIndex={0}
+          title="Each agent told the Moderator its member’s reasons alone. Only compromises and answers are shown here, without names."
+        >
+          🔒 Reasons stay private
+        </span>
         {onHide ? (
           <button className="at-close" type="button" onClick={onHide} aria-label="Hide" title="Hide">
             ×
           </button>
         ) : null}
       </header>
-      {!talking && thread.bridge ? <p className="at-bridge">“{thread.bridge}”</p> : null}
-      {open ? (
-        <div className="at-body">
-          <p className="at-private">
-            <AgentIcon size={12} /> Each agent told the Moderator its member’s reasons alone. Those stay private; only wordings and
-            answers are shown here, without names.
+      {stuck ? null : <Steps thread={thread} />}
+
+      {done ? (
+        <article className="at-card">
+          <p className="at-kicker">
+            {thread.bridgedBy === "agents" ? "The agents settled on a suggested edit" : `All ${thread.agents} agents accept this compromise`}
           </p>
-          {thread.rounds.map((round, index) => (
-            <RoundView key={round.round} round={round} index={index + 1} />
+          <p className="at-text-main">“{thread.bridge}”</p>
+          <p className="at-next">↓ Sent to the team as a new agreement check. Answer it in your own window.</p>
+        </article>
+      ) : stuck ? (
+        <article className="at-card">
+          <p className="at-kicker">No compromise everyone accepts yet</p>
+          {latest ? <p className="at-text-main">Last one: “{latest.wording}”</p> : null}
+          <p className="at-next stuck">Keep talking in the chat. When the team settles on a version, the Moderator checks it again.</p>
+        </article>
+      ) : latest ? (
+        <Compromise round={latest} label={rounds.length > 1 ? "Latest compromise" : "Compromise"} thread={thread} latest />
+      ) : (
+        <p className="at-wait">The Moderator is asking each agent, alone, why its member read it that way.</p>
+      )}
+
+      {earlier.length ? (
+        <details className="at-earlier">
+          <summary>
+            {done || stuck ? `How they got here (${plural(earlier.length, "compromise", "compromises")})` : `Earlier compromise (${earlier.length})`}
+          </summary>
+          {earlier.map((round, i) => (
+            <Compromise key={round.round} round={round} label={`Compromise ${i + 1}`} thread={thread} latest={false} />
           ))}
-        </div>
+        </details>
       ) : null}
     </section>
-  );
-}
-
-function RoundView({ round, index }: { round: TableRound; index: number }) {
-  return (
-    <article className="at-round">
-      <p className="at-meta">
-        <span className="at-from">
-          <ModeratorIcon size={12} /> Moderator
-        </span>
-        <span className="act-chip propose">wording {index}</span>
-      </p>
-      <p className="at-wording">“{round.wording}”</p>
-      {round.note ? <p className="at-text">{round.note}</p> : null}
-      {round.answered ? (
-        <p className="at-tally">
-          {round.accepted ? <span className="act-chip accept">{round.accepted} accepted</span> : null}
-          {round.changed ? <span className="act-chip counter">{round.changed} proposed a change</span> : null}
-          {round.rejected ? <span className="act-chip reject">{round.rejected} rejected</span> : null}
-          {round.silent ? <span className="act-chip">{round.silent} no answer</span> : null}
-        </p>
-      ) : (
-        <p className="at-extra">The agents are answering. Their answers appear together once all have answered.</p>
-      )}
-      {round.changes.map((change) => (
-        <div className="at-line agent" key={change.id}>
-          <p className="at-meta">
-            <span className="at-from">
-              <AgentIcon size={12} /> An agent
-            </span>
-            <span className="act-chip counter">proposes a change</span>
-          </p>
-          <p className="at-wording">“{change.wording}”</p>
-          {round.reacted ? (
-            <p className="at-tally">
-              <span className="act-chip accept">{change.support} other {change.support === 1 ? "agent supports" : "agents support"}</span>
-              {change.object ? <span className="act-chip reject">{change.object} {change.object === 1 ? "objects" : "object"}</span> : null}
-            </p>
-          ) : (
-            <p className="at-extra">The other agents are reacting.</p>
-          )}
-        </div>
-      ))}
-    </article>
   );
 }
 
@@ -199,7 +263,7 @@ function describe(d: TableDraft): string {
   if (d.step === "react") {
     return (d.reactions ?? []).map((r) => `${r.act === "accept" ? "supported" : "objected to"} “${r.wording}”`).join("; ") || "No reaction.";
   }
-  return d.act === "accept" ? "Accepted the wording." : d.act === "reject" ? "Rejected the wording." : `Proposed a change: “${d.text}”`;
+  return d.act === "accept" ? "Accepted the compromise." : d.act === "reject" ? "Rejected the compromise." : `Proposed a change: “${d.text}”`;
 }
 
 function ApprovalCard({ draft, act }: { draft: TableDraft; act: Act }) {

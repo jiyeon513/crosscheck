@@ -54,7 +54,6 @@
   font-size: 11.5px;
   font-weight: 600;
 }
-.at-toggle,
 .at-close {
   margin-left: auto;
   border: 0;
@@ -63,9 +62,6 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-}
-.at-toggle + .at-close {
-  margin-left: 0;
 }
 .at-close {
   font-size: 16px;
@@ -80,102 +76,6 @@
   display: flex;
   gap: 8px;
 }
-.at-bridge {
-  margin: 0;
-  color: var(--ink);
-  font-weight: 600;
-}
-.at-messages {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  max-height: 340px;
-  overflow-y: auto;
-}
-.at-line {
-  padding: 7px 9px;
-  border-radius: 9px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.at-line.agent {
-  margin-left: 14px;
-  border-color: var(--agent-line);
-}
-.at-line.mine {
-  background: var(--agent-soft);
-}
-.at-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 6px;
-  margin: 0 0 2px;
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-.at-from {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.at-line.mod .at-from {
-  color: var(--mod);
-}
-.at-line.agent .at-from {
-  color: var(--agent);
-}
-.at-approved {
-  color: var(--brand);
-}
-.at-text,
-.at-wording,
-.at-extra {
-  margin: 0;
-}
-.at-wording {
-  font-weight: 600;
-  color: var(--ink);
-}
-.at-extra {
-  color: var(--ink-3);
-  font-size: 12px;
-}
-.act-chip {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  color: var(--ink-2);
-  font-size: 11px;
-}
-.act-chip.accept {
-  border-color: var(--brand-line);
-  background: var(--brand-soft);
-  color: var(--brand);
-}
-.act-chip.counter,
-.act-chip.justify {
-  border-color: var(--log-line);
-  background: var(--log-soft);
-  color: var(--log);
-}
-.act-chip.reject {
-  border-color: #f3c2bd;
-  background: #fdf0ee;
-  color: var(--danger);
-}
-.act-chip.propose,
-.act-chip.ask {
-  border-color: var(--mod-line);
-  background: var(--mod-soft);
-  color: var(--mod);
-}
-
 /* Private window */
 .at-drafts {
   display: grid;
@@ -210,39 +110,211 @@
   color: var(--mod);
 }
 
-/* Rounds on the table, and the private list */
-.at-body {
-  display: grid;
-  gap: 8px;
-  max-height: 380px;
-  overflow-y: auto;
-}
-.at-private {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 0;
-  color: var(--ink-3);
-  font-size: 12px;
-}
-.at-round {
-  display: grid;
-  gap: 5px;
-  padding: 8px 10px;
-  border-radius: 9px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.at-tally {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin: 0;
-}
+/* The private list */
 .at-step {
   font-weight: 600;
   color: var(--ink-2);
 }
 .at-why {
   color: var(--agent);
+}
+
+/* The table below the chat: four steps, the latest compromise, earlier ones folded */
+.at-lock {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: 12px;
+  cursor: help;
+}
+.at-lock + .at-close {
+  margin-left: 4px;
+}
+.at-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.at-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.at-steps li + li::before {
+  content: "";
+  width: 14px;
+  height: 1.5px;
+  margin-right: 2px;
+  background: var(--line-strong);
+}
+.at-dot {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: 700;
+}
+.at-steps li.ok .at-dot {
+  border-color: var(--mod);
+  background: var(--mod);
+  color: #fff;
+}
+.at-steps li.now {
+  color: var(--ink);
+  font-weight: 600;
+}
+.at-steps li.now .at-dot {
+  border-color: var(--mod);
+  color: var(--mod);
+}
+.agents-table.bridged .at-steps li.ok .at-dot {
+  border-color: var(--brand);
+  background: var(--brand);
+}
+.agents-table.bridged .at-steps li.now .at-dot {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.at-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.at-card p {
+  margin: 0;
+}
+.at-kicker {
+  color: var(--mod);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.agents-table.bridged .at-kicker {
+  color: var(--brand);
+}
+.at-text-main {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.at-card.earlier .at-text-main {
+  font-size: 13px;
+}
+.at-votes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.at-votes > span:last-child {
+  margin-left: 3px;
+}
+.at-v {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 700;
+}
+.at-v.yes {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.at-v.edit {
+  border-color: var(--log-line);
+  background: var(--log-soft);
+  color: var(--log);
+}
+.at-v.no {
+  border-color: #f3c2bd;
+  background: #fdf0ee;
+  color: var(--danger);
+}
+.at-v.in {
+  border-color: var(--mod-line);
+  background: var(--mod-soft);
+  color: var(--mod);
+}
+.at-v.wait {
+  border-style: dashed;
+}
+.at-edits {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 0 0;
+  border-top: 1px dashed var(--line);
+  list-style: none;
+}
+.at-edit-text {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.at-edit-text b {
+  color: var(--log);
+}
+.at-react {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.at-react b.yes {
+  color: var(--brand);
+}
+.at-react b.no {
+  color: var(--danger);
+}
+.at-next {
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 600;
+}
+.at-next.stuck {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.at-wait {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.at-earlier summary {
+  cursor: pointer;
+  color: var(--mod);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.agents-table.bridged .at-earlier summary {
+  color: var(--brand);
+}
+.at-earlier[open] {
+  display: grid;
+  gap: 8px;
+}
+.at-earlier[open] summary {
+  margin-bottom: 2px;
 }
