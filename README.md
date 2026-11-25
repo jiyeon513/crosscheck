@@ -1,5 +1,7 @@
 # CrossCheck
 
+[Open the live prototype on Render](https://crosscheck-5269.onrender.com/)
+
 A group chat for student team projects. Each group keeps one ongoing team chat, a schedule of meetings, and a decision log per meeting. Inside a meeting, two kinds of agents help the team share ideas and leave with the same understanding:
 
 | | Moderator (one per meeting) | Personal Agent (one per member) |
@@ -40,6 +42,8 @@ Or with Docker: `docker build -t crosscheck .` then `docker run -p 8787:8787 -e 
 Any host that runs a Docker image or a Node 20+ process with a writable folder works the same way (Railway, Fly.io, a VM).
 
 ## How the pieces fit
+
+The browser app starts in [src/main.tsx](src/main.tsx), which renders [App](src/App.tsx). The backend starts in [server/index.ts](server/index.ts). The Moderator and Personal Agent are implemented in [agents/moderator.ts](agents/moderator.ts) and [agents/personal.ts](agents/personal.ts), respectively. [agents/meeting.ts](agents/meeting.ts) coordinates when each agent runs and what context it receives.
 
 ```
 Browser (src/)                    Server (server/)                         Agents (agents/, prompts/)
