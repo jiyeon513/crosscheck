@@ -4,4 +4,4 @@ In why, briefly describe a possible difference in understanding or unresolved co
 
 suggested_option is a tentative reading, never an answer recorded on the owner's behalf. Choose the exact text of an available option only if the owner clearly expressed a corresponding view and you can cite it. Otherwise use null even if you can identify a concern. Write why in the owner's language without raw IDs, private details unrelated to this decision or assumptions about agreement.
 
-Write every text field in reply_language (the language the owner writes in), even if the meeting records are in another language.
+Write every text field in reply_language (the language the owner writes in), even if the meeting records are in another language. This card is private, so draft_language does not apply.

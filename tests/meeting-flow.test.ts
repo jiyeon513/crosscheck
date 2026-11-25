@@ -5,7 +5,7 @@ import { useFixtureGenerator } from "../agents/llm";
 import { Meeting } from "../agents/meeting";
 import * as personal from "../agents/personal";
 import { TEAM_QUESTION_NOTICE, type Card } from "../agents/protocol";
-import { enableFixtureModels } from "./mocks";
+import { enableFixtureModels, fixtureResponse } from "./mocks";
 
 enableFixtureModels();
 
@@ -13,6 +13,21 @@ const cards = (m: Meeting, user: string): Card[] =>
   m.view(user).private.flatMap((item) => (item.type === "card" ? [item.card] : []));
 const openCheckCard = (m: Meeting, user: string) =>
   cards(m, user).find((c) => c.kind === "understanding_check" && c.status === "open");
+
+/** A member states a proposal in the team chat and the Moderator detects exactly that text. */
+async function proposeInChat(m: Meeting, user: string, text: string) {
+  useFixtureGenerator((prompt, context) => prompt === "moderator/detect_decision"
+    ? {
+      is_decision: true, decision: text, ambiguity: "", challenged: 0, reason: "test proposal",
+      question: "Is this how you understood the decision?", options: ["Yes, as stated", "I understood it differently", "Not sure yet"],
+    }
+    : fixtureResponse(prompt, context));
+  try {
+    await m.postGroupMessage(user, text);
+  } finally {
+    enableFixtureModels();
+  }
+}
 
 function room(rules: ConstructorParameters<typeof Meeting>[0]["rules"] = {}) {
   const m = new Meeting({ goal: "Pick a project topic", host: "Minsu", rules });
@@ -47,7 +62,7 @@ test("a public amendment after two approvals requires three fresh approvals of t
   const original = "Publish the visitor guide";
   const revision = "in print only";
   const full = original + " " + revision;
-  await m.proposeDecision("Minsu", original);
+  await proposeInChat(m, "Minsu", original);
   const first = m.check!;
   for (const user of ["Minsu", "Jiwoo"]) await m.answerCheck(user, first.id, "Yes", true);
   assert.equal(m.view("Taeho").agreement?.approvedCount, 2);
@@ -119,19 +134,19 @@ test("a mismatch closes the check, explains the next step, and the next decision
 
 test("re-confirming an agreed decision does not open another check", async () => {
   const m = room();
-  await m.proposeDecision("Jiwoo", "Send the consent forms by Friday");
+  await proposeInChat(m, "Jiwoo", "Send the consent forms by Friday");
   for (const user of ["Minsu", "Jiwoo", "Taeho"]) await m.answerCheck(user, m.check!.id, "Yes, as stated", true);
   assert.equal(m.decisions.length, 1);
   const agreed = m.check;
-  await assert.rejects(m.proposeDecision("Taeho", "Send the consent forms by Friday"), /already agreed/);
+  await proposeInChat(m, "Taeho", "Send the consent forms by Friday");
   assert.equal(m.check, agreed);
+  assert.equal(m.decisions.length, 1);
 });
 
-test("a member's proposal opens a check on exactly that text; the host can cancel a check", async () => {
+test("the host can cancel a check; other members cannot", async () => {
   const m = room();
-  await m.proposeDecision("Taeho", "Meet every Monday at 7 pm");
+  await proposeInChat(m, "Taeho", "Meet every Monday at 7 pm");
   assert.equal(m.check!.decision, "Meet every Monday at 7 pm");
-  assert.match(m.group.at(-2)!.text, /^Proposal for the team: "Meet every Monday at 7 pm"/);
   assert.throws(() => m.cancelCheck("Taeho", m.check!.id), /Only the host/);
   m.cancelCheck("Minsu", m.check!.id);
   assert.equal(m.check!.status, "cancelled");
@@ -257,7 +272,7 @@ test("the team sees a delivery receipt even when nobody has relevant private not
   assert.ok(m.participants.every(user => cards(m, user).length === 0));
   assert.equal(m.trace.filter(e => e.data.type === "angle_query").length, 1);
   assert.equal(m.trace.filter(e => e.data.prompt === "personal/react").length, 0);
-  await m.proposeDecision("Minsu", "Start with the campus library.");
+  await proposeInChat(m, "Minsu", "Start with the campus library.");
   await m.postGroupMessage("Jiwoo", question);
   assert.equal(m.trace.filter(e => e.data.type === "angle_query").length, 1);
 });
@@ -292,16 +307,40 @@ test("an Ask receipt does not interrupt detection of a team decision", async () 
   assert.match(m.check!.decision, /study app/);
 });
 
-test("the personal agent is told to answer in the language the member wrote in", async () => {
+test("the reply follows the member's language; a draft follows the group chat's language", async () => {
   const seen: unknown[] = [];
   const capture: personal.Generate = async (_prompt, context) => {
-    seen.push((context as { reply_language: string }).reply_language);
-    return { reply: "ok", share_draft: null, concern: null };
+    const { reply_language: reply, draft_language: draft } = context as { reply_language: string; draft_language: string };
+    seen.push([reply, draft]);
+    return {
+      reply: reply === "Korean" ? "좋아요, 같이 생각해 봐요." : "Sure, let's think it through.",
+      share_draft: draft === "Korean" ? "금요일까지 초안을 마칠까요?" : "Shall we finish the draft by Friday?",
+      concern: null,
+    };
   };
-  const base = { user: "Min", goal: "g", group: [], privateHistory: [], stage: "ideation" as const };
-  await personal.chat({ ...base, message: "What should I bring?" }, undefined, capture);
-  await personal.chat({ ...base, message: "뭘 준비하면 좋을까?" }, undefined, capture);
-  assert.deepEqual(seen, ["English", "Korean"]);
+  const english = [{ id: "g1", author: "Ana", kind: "user" as const, text: "When should we finish the draft?" }];
+  const base = { user: "Min", goal: "g", privateHistory: [], stage: "ideation" as const };
+  await personal.chat({ ...base, group: [], message: "What should I bring?" }, undefined, capture);
+  // A Korean member in an English-speaking team: the reply is Korean, the draft for the team is English.
+  const res = await personal.chat({ ...base, group: english, message: "금요일까지 하자고 해볼까?" }, undefined, capture);
+  assert.deepEqual(seen, [["English", "English"], ["Korean", "English"]]);
+  assert.match(res.reply, /좋아요/);
+  assert.equal(res.share_draft, "Shall we finish the draft by Friday?");
+});
+
+test("a reply in the wrong language is asked for once more", async () => {
+  let calls = 0;
+  const drifting: personal.Generate = async () => {
+    calls++;
+    return { reply: calls === 1 ? "Sure, bring the slides." : "슬라이드를 가져오면 좋아요.", share_draft: null, concern: null };
+  };
+  const res = await personal.chat(
+    { user: "Min", goal: "g", group: [], privateHistory: [], stage: "ideation", message: "뭘 준비하면 좋을까?" }, undefined, drifting,
+  );
+  assert.equal(calls, 2);
+  assert.match(res.reply, /슬라이드/);
+  assert.equal(personal.isInLanguage("지연 said Friday works for the team.", "English"), true);
+  assert.equal(personal.isInLanguage("Friday로 하면 좋겠어요, 다들 괜찮죠?", "Korean"), true);
 });
 
 /** Scripted Moderator for the revisit tests: decisions, challenges and comparisons by keyword. */

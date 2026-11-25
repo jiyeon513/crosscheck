@@ -1149,20 +1149,9 @@ input:focus {
   border-color: var(--agent);
 }
 
-.composer.over .drop-overlay,
-.log-panel.over .drop-overlay {
+.composer.over .drop-overlay {
   opacity: 1;
   background: rgba(255, 255, 255, 0.7);
-}
-
-.log-panel.active {
-  border: 2px dashed var(--log-line);
-  background: var(--log-soft);
-}
-
-.log-panel.over {
-  border-style: solid;
-  border-color: var(--log);
 }
 
 .drag-ghost {
@@ -1207,10 +1196,6 @@ input:focus {
 .log-panel .panel-head {
   background: var(--log-soft);
   border-bottom-color: var(--log-line);
-}
-
-.log-panel.active .panel-head {
-  background: transparent;
 }
 
 .decision {
@@ -1275,11 +1260,6 @@ input:focus {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
-}
-
-.log-panel.closed .drop-overlay span {
-  writing-mode: vertical-rl;
-  padding: 14px 6px;
 }
 
 .log-panel.flash {
@@ -2096,6 +2076,83 @@ button.schedule-row.past:hover {
   font-weight: 600;
 }
 
+/* A draft from the private chat: one small row with a toggle on the right until it is opened. */
+.pcard.compact {
+  gap: 0;
+  padding: 0;
+  max-width: 320px;
+  border-left-width: 1px;
+  box-shadow: none;
+}
+
+.pcard.compact.expanded {
+  gap: 7px;
+  max-width: 94%;
+  padding: 0 12px 11px;
+}
+
+.pcard-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pcard.compact.expanded .pcard-row {
+  padding: 8px 0 2px;
+}
+
+.pcard-row:hover {
+  background: var(--agent-soft);
+}
+
+.pcard.compact.expanded .pcard-row:hover {
+  background: transparent;
+}
+
+.pcard-row:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: 2px;
+}
+
+.pcard-row .pcard-kicker {
+  flex: 1;
+}
+
+.pcard-row-state {
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.pcard-chevron {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--agent-soft);
+  color: var(--agent);
+  font-size: 9px;
+  line-height: 1;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .pcard-ask {
   justify-self: start;
   padding: 0;
@@ -2293,6 +2350,55 @@ button.schedule-row.past:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* "Check agreement now" while a check is open: visible, grey, with the reason on hover or focus. */
+.tool-disabled {
+  position: relative;
+  display: inline-flex;
+  cursor: not-allowed;
+  border-radius: 8px;
+}
+
+.chat-tools .host-buttons .tool-disabled .btn:disabled,
+.tool-disabled .btn:disabled {
+  opacity: 1;
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.tool-tip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: white;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+
+.tool-disabled:hover .tool-tip,
+.tool-disabled:focus-visible .tool-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.tool-disabled:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .host-buttons .btn,
@@ -2558,17 +2664,6 @@ button.schedule-row.past:hover {
   border-radius: 999px;
   background: var(--log);
   animation: blink 1.4s infinite ease-in-out;
-}
-
-.log-toggle.drop-ready {
-  border-style: dashed;
-  border-width: 2px;
-}
-
-.log-toggle.over {
-  border-style: solid;
-  border-color: var(--log);
-  box-shadow: 0 0 0 4px rgba(183, 121, 31, 0.2);
 }
 
 .log-toggle.flash {
@@ -2915,13 +3010,8 @@ button.schedule-row.past:hover {
     padding: 12px;
   }
 
-  .rail-label,
-  .log-panel.closed .drop-overlay span {
+  .rail-label {
     writing-mode: horizontal-tb;
-  }
-
-  .log-panel.closed .drop-overlay span {
-    padding: 8px 14px;
   }
 
   .room-header .me {

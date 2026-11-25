@@ -259,17 +259,6 @@ export class Meeting {
     this.moderatorSays("The host closed this agreement check. Carry on.", { type: "check_closed" });
   }
 
-  /** Any member: put a proposal to the team. The Moderator opens an agreement check on exactly this text. */
-  async proposeDecision(user: string, text: string): Promise<void> {
-    this.requireUser(user);
-    const proposal = text.trim();
-    if (!proposal) throw new Error("Empty proposal");
-    if (this.alreadyAgreed(proposal)) throw new Error("The team already agreed on this");
-    this.addGroup(user, "user", `Proposal for the team: "${proposal}"`);
-    this.log("user_to_group", `user:${user}`, "group", { proposal: true });
-    await this.openCheck({ decision: proposal, ...(await this.frame(user, proposal)) }, this.discussing?.recordId);
-  }
-
   /** Ask the Moderator how members might read a given proposal (question + options). */
   private async frame(author: string, proposal: string): Promise<{ question: string; options: string[] }> {
     const fallback = {

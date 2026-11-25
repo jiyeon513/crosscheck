@@ -145,8 +145,6 @@ export async function roomAction(name: string, key: string, action: string, body
     case "POST dismiss":
       meeting.dismissCard(name, text(body.cardId));
       return acknowledge;
-    case "POST propose":
-      return run(room, meeting.proposeDecision(name, text(body.text)));
     case "POST angle":
       return run(room, meeting.requestAngle(name, text(body.angle), "find_contribution"));
     case "POST check/answer":

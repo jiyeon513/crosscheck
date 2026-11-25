@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ModeratorIcon } from "./icons";
 import type { RoomView } from "./api";
 import { formatMeetingTime, meetingStatus, type Decision, type Meeting, type MeetingStatus } from "./model";
@@ -7,16 +7,9 @@ type Agreement = NonNullable<RoomView["agreement"]>;
 type Discussing = RoomView["discussing"];
 type Act = (action: string, body: object) => Promise<void>;
 
-export type Zone = {
-  onDragOver: (event: DragEvent) => void;
-  onDragLeave: (event: DragEvent) => void;
-  onDrop: (event: DragEvent) => void;
-};
-
 /**
  * The chat room's middle panel: the decision log of the meeting happening now (or next).
  * Only the Moderator adds decisions (after everyone agrees); members can fix the wording.
- * Dropping a message here proposes it, and the Moderator opens an agreement check.
  */
 export default function CurrentLog({
   meeting,
@@ -26,9 +19,6 @@ export default function CurrentLog({
   onEdit,
   onSchedule,
   onOpenGroup,
-  zone,
-  over,
-  dragging,
   flash,
   agreement,
   discussing,
@@ -43,9 +33,6 @@ export default function CurrentLog({
   onEdit: (id: string, text: string) => Promise<void>;
   onSchedule: (title: string, startsAt: string) => Promise<void>;
   onOpenGroup: () => void;
-  zone: Zone;
-  over: boolean;
-  dragging: boolean;
   flash: boolean;
   agreement: Agreement | null;
   isHost: boolean;
@@ -56,18 +43,15 @@ export default function CurrentLog({
   const panelClass = [
     "log-panel",
     open ? "open" : "closed",
-    over ? "over" : "",
-    dragging ? "active" : "",
     flash ? "flash" : "",
   ].join(" ");
-  const dropLabel = "Drop to propose it for an agreement check";
 
   // Closed: the panel is gone; the "Decision log" button in the team chat header opens it.
   if (!open) return null;
 
 
   return (
-    <section className={panelClass} {...zone}>
+    <section className={panelClass}>
       <header className="panel-head log-head">
         <div>
           <h2>
@@ -136,12 +120,12 @@ export default function CurrentLog({
       <button className="past-link" type="button" onClick={onOpenGroup}>
         Schedule & past decision logs ›
       </button>
-      <DropOverlay label={dropLabel} />
     </section>
   );
 }
 
-/** Shortcuts to the Moderator that any member can use. */
+const CHECK_OPEN_NOTE = "A decision is already being checked. Finish or close it first.";
+
 /** Shortcuts to the Moderator that any member can use; shown above the team chat composer. */
 export function ModeratorTools({ act, checking, onDone }: { act: Act; checking: boolean; onDone?: () => void }) {
   const [angle, setAngle] = useState("");
@@ -196,16 +180,28 @@ export function ModeratorTools({ act, checking, onDone }: { act: Act; checking: 
           <button className="btn ghost small" type="button" disabled={busy} onClick={() => setAsking(true)}>
             Ask about an angle
           </button>
-          {!checking ? (
+          {/* While a check is open the button stays visible but disabled. A disabled button gets no
+              hover events in some browsers, so the explanation sits on the wrapper. */}
+          <span
+            className={checking ? "tool-disabled" : undefined}
+            title={checking ? CHECK_OPEN_NOTE : undefined}
+            tabIndex={checking ? 0 : undefined}
+            aria-describedby={checking ? "check-open-note" : undefined}
+          >
             <button
               className="btn ghost small"
               type="button"
-              disabled={busy}
+              disabled={busy || checking}
               onClick={() => void run("check/start", {}, "The Moderator is checking the latest proposal.")}
             >
               Check agreement now
             </button>
-          ) : null}
+            {checking ? (
+              <span className="tool-tip" id="check-open-note" role="tooltip">
+                {CHECK_OPEN_NOTE}
+              </span>
+            ) : null}
+          </span>
         </div>
       )}
       {asking ? <p className="host-note" id="angle-audience">Your question will appear in the team chat.</p> : null}
@@ -560,14 +556,6 @@ export function ScheduleForm({
         </button>
       </div>
     </form>
-  );
-}
-
-function DropOverlay({ label }: { label: string }) {
-  return (
-    <div className="drop-overlay" aria-hidden="true">
-      <span>{label}</span>
-    </div>
   );
 }
 
