@@ -2076,6 +2076,82 @@ button.schedule-row.past:hover {
   font-weight: 600;
 }
 
+/* A draft from the private chat: one small row with a toggle on the right until it is opened. */
+.pcard.compact {
+  gap: 0;
+  padding: 0;
+  max-width: 320px;
+  border-left-width: 1px;
+  box-shadow: none;
+}
+
+.pcard.compact.expanded {
+  gap: 7px;
+  max-width: 94%;
+  padding: 0 12px 11px;
+}
+
+.pcard-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pcard.compact.expanded .pcard-row {
+  padding: 8px 0 2px;
+}
+
+.pcard-row:hover {
+  background: var(--agent-soft);
+}
+
+.pcard.compact.expanded .pcard-row:hover {
+  background: transparent;
+}
+
+.pcard-row:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: 2px;
+}
+
+.pcard-row .pcard-kicker {
+  flex: 1;
+}
+
+.pcard-row-state {
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.pcard-chevron {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--agent-soft);
+  color: var(--agent);
+  font-size: 11px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .pcard-toggle {
   justify-self: start;
   display: inline-flex;
