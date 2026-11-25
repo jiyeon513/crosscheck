@@ -13,7 +13,11 @@ type Log = (record: LLMRecord) => void;
 
 // ---------- 1. Is the brainstorm missing an angle? (called after the chat goes quiet) ----------
 
-export type MissingAngleInput = { goal: string; group: ChatLine[]; anglesAsked: string[] };
+export type MissingAngleInput = {
+  goal: string; group: ChatLine[]; anglesAsked: string[];
+  /** Topic labels the personal agents reported for thoughts nobody has shared yet. No names, no private text. */
+  heldTopics?: string[];
+};
 
 export async function findMissingAngle(input: MissingAngleInput, log?: Log): Promise<MissingAngle> {
   const data = await callJSON<MissingAngle>(
@@ -21,6 +25,7 @@ export async function findMissingAngle(input: MissingAngleInput, log?: Log): Pro
     {
       goal: input.goal,
       anglesAsked: formatList(input.anglesAsked),
+      heldTopics: formatList(input.heldTopics ?? []),
       groupChat: formatChat(input.group),
     },
     input, log,

@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import { llmInfo, type LLMRecord } from "./llm";
 import * as moderator from "./moderator";
 import * as personal from "./personal";
+import { topicLabels } from "./topics";
 import { DEFAULT_RULES, type Rules } from "./rules";
 import { isUnsure, norm } from "./format";
 import { TEAM_QUESTION_NOTICE } from "./protocol";
@@ -377,20 +378,37 @@ export class Meeting {
     this.angleBusy = true;
     this.userMsgsAtLastAngleRun = userMsgs;
     try {
+      const heldTopics = await this.collectHeldTopics();
       const res = await moderator.findMissingAngle(
-        { goal: this.goal, group: this.groupContext(), anglesAsked: this.anglesAsked },
+        { goal: this.goal, group: this.groupContext(), anglesAsked: this.anglesAsked, heldTopics },
         this.llmLog("moderator"),
       );
       if (res.action !== "ask_angle" || this.stage !== "ideation") return;
       this.anglesAsked.push(res.angle);
       const found = await this.askAboutAngle(res.angle, "find_contribution");
       // Nobody has a private thought on it: the moderator offers the angle to the whole group instead.
-      if (!found && res.group_prompt && this.stage === "ideation") {
+      // Not when topic labels were used: the angle may come from a private note, so it must not be posted in public.
+      if (!found && !heldTopics.length && res.group_prompt && this.stage === "ideation") {
         this.moderatorSays(res.group_prompt, { type: "angle_prompt", angle: res.angle });
       }
     } finally {
       this.angleBusy = false;
     }
+  }
+
+  /**
+   * Task 2: each personal agent reports short topic labels for its member's unshared thoughts.
+   * The Moderator gets them merged and shuffled: no names, no private sentences.
+   */
+  private async collectHeldTopics(): Promise<string[]> {
+    this.log("mod_to_agents", "moderator", "agents", { type: "topic_query" });
+    const reports = await Promise.all(this.participants.map((p) =>
+      topicLabels(this.ownerContext(p), this.llmLog(`agent:${p}`)).catch(() => [] as string[])));
+    const seen = new Set<string>();
+    const labels = shuffle(reports.flat()).filter((label) => !seen.has(norm(label)) && Boolean(seen.add(norm(label))));
+    // Logged only after merging, so nothing records which agent sent which label.
+    if (labels.length) this.log("agent_to_mod", "agents", "moderator", { type: "topic_labels", labels });
+    return labels;
   }
 
   private async askAboutAngle(angle: string, intent: "find_contribution" | "invite_brainstorm", relayedPost?: GroupMessage): Promise<boolean> {
