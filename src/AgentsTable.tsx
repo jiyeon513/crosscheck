@@ -215,11 +215,27 @@ function TableTalk({ thread, onHide }: { thread: ThreadView; onHide?: () => void
   );
 }
 
-const STEP_LABEL: Record<TableDraft["step"], string> = {
-  position: "Told the Moderator, privately",
-  respond: "At the table",
-  react: "Reacted to the other agents' changes",
-};
+/** One short line per thing your agent did, with an icon; the details open on click. */
+function logLine(d: TableDraft): { icon: string; kind: string; text: string } {
+  if (d.status === "declined") return { icon: "–", kind: "none", text: d.step === "position" ? "You chose not to send your reason" : "You chose not to propose it" };
+  if (d.status === "closed") return { icon: "–", kind: "none", text: "Not sent: the step ended" };
+  if (d.step === "position") return { icon: "→", kind: "in", text: "Told the Moderator your reason" };
+  if (d.step === "react") {
+    const yes = (d.reactions ?? []).filter((r) => r.act === "accept").length;
+    const no = (d.reactions ?? []).filter((r) => r.act !== "accept").length;
+    const parts = [yes ? `agreed with ${yes} ${yes === 1 ? "edit" : "edits"}` : "", no ? `disagreed with ${no}` : ""].filter(Boolean);
+    return { icon: "↔", kind: "in", text: parts.length ? parts.join(" · ").replace(/^./, (c) => c.toUpperCase()) : "No reaction" };
+  }
+  if (d.act === "accept") return { icon: "✓", kind: "yes", text: "Accepted the compromise" };
+  if (d.act === "reject") return { icon: "✕", kind: "no", text: "Rejected the compromise" };
+  return { icon: "✎", kind: "edit", text: "Suggested an edit" };
+}
+
+function logDetail(d: TableDraft): string {
+  if (d.step === "position") return d.text;
+  if (d.step === "react") return (d.reactions ?? []).map((r) => `${r.act === "accept" ? "✓" : "✕"} “${r.wording}”`).join("  ");
+  return d.act === "counter" ? `“${d.text}”` : "";
+}
 
 /** In the private window: what your agent did at the table, and anything waiting for your approval. */
 export function TableDrafts({ table, act }: { table: ThreadView[]; act: Act }) {
@@ -236,14 +252,35 @@ export function TableDrafts({ table, act }: { table: ThreadView[]; act: Act }) {
                 <summary>
                   <AgentIcon size={13} className="inline-icon" /> Your agent at the agents’ table ({done.length})
                 </summary>
-                <ul>
-                  {done.map((d) => (
-                    <li key={d.id}>
-                      <span className="at-step">{STEP_LABEL[d.step]}</span> {describe(d)}
-                      {d.note ? <em className="at-why"> · {d.note}</em> : null}
-                      {d.status === "closed" ? <em> · not sent, the step ended</em> : d.auto && d.step !== "react" ? <em> · sent without asking: it used nothing private</em> : null}
-                    </li>
-                  ))}
+                <ul className="at-log">
+                  {done.map((d) => {
+                    const line = logLine(d);
+                    const detail = logDetail(d);
+                    const more = Boolean(detail || d.note || d.condition || d.auto);
+                    const head = (
+                      <>
+                        <span className={`at-v small ${line.kind}`} aria-hidden="true">{line.icon}</span>
+                        <span>{line.text}</span>
+                      </>
+                    );
+                    return (
+                      <li key={d.id}>
+                        {more ? (
+                          <details>
+                            <summary>{head}</summary>
+                            <div className="at-log-more">
+                              {detail ? <p>{detail}</p> : null}
+                              {d.condition ? <p className="at-muted">If: {d.condition}</p> : null}
+                              {d.note ? <p className="at-why">{d.note}</p> : null}
+                              {d.auto && d.step !== "react" ? <p className="at-muted">Sent automatically: it used nothing private.</p> : null}
+                            </div>
+                          </details>
+                        ) : (
+                          <p className="at-log-line">{head}</p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </details>
             ) : null}
@@ -257,44 +294,39 @@ export function TableDrafts({ table, act }: { table: ThreadView[]; act: Act }) {
   );
 }
 
-function describe(d: TableDraft): string {
-  if (d.status === "declined") return "Nothing (you chose not to send).";
-  if (d.step === "position") return d.text + (d.condition ? ` (condition: ${d.condition})` : "");
-  if (d.step === "react") {
-    return (d.reactions ?? []).map((r) => `${r.act === "accept" ? "supported" : "objected to"} “${r.wording}”`).join("; ") || "No reaction.";
-  }
-  return d.act === "accept" ? "Accepted the compromise." : d.act === "reject" ? "Rejected the compromise." : `Proposed a change: “${d.text}”`;
-}
-
 function ApprovalCard({ draft, act }: { draft: TableDraft; act: Act }) {
   const [text, setText] = useState(draft.text);
   const { busy, error, run } = useRun(act);
   const position = draft.step === "position";
   return (
     <article className="pcard speak open">
-      <p className="pcard-kicker">{position ? "Your agent would tell the Moderator, privately" : "Your agent would propose this change to the other agents"}</p>
-      <blockquote className="pcard-decision">{position ? `Moderator · ${draft.prompt}` : draft.prompt}</blockquote>
-      <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label={position ? "What your agent would say" : "The changed wording"} />
-      {draft.condition ? <p className="pcard-why">Condition: {draft.condition}</p> : null}
-      {draft.note ? (
-        <p className="pcard-why">
-          <AgentIcon size={13} className="inline-icon" /> {draft.note}
-        </p>
-      ) : null}
-      {draft.why ? <p className="pcard-why">{draft.why}</p> : null}
+      <div className="at-ask-head">
+        <p className="pcard-kicker">{position ? "Send your reason to the Moderator?" : "Propose this edit to the other agents?"}</p>
+        {draft.why ? <span className="at-private-chip" title={draft.why}>🔒 Uses your private notes</span> : null}
+      </div>
+      <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} aria-label={position ? "What your agent would say" : "The changed compromise"} />
+      {draft.condition ? <p className="at-muted">If: {draft.condition}</p> : null}
       <div className="pcard-actions">
         <button className="btn primary small" type="button" disabled={busy || !text.trim()} onClick={() => run("table/speak", { draftId: draft.id, send: true, text })}>
-          {position ? "Send to the Moderator only" : "Propose this change"}
+          {position ? "Send" : "Propose"}
         </button>
         <button className="btn ghost small" type="button" disabled={busy} onClick={() => run("table/speak", { draftId: draft.id, send: false })}>
           {position ? "Don't send" : "Don't propose"}
         </button>
+        <span className="at-muted">{position ? "Only the Moderator sees it, without your name." : "Shown to everyone without your name."}</span>
       </div>
-      <p className="fine-left">
-        {position
-          ? "Only the Moderator reads this, without your name. It may use what you need to word a proposal for everyone, but never quotes you."
-          : "The change is shown to everyone without your name."}
-      </p>
+      <details className="at-why-more">
+        <summary>Why?</summary>
+        <p>
+          <b>{position ? "The Moderator asked:" : "On the table:"}</b> {draft.prompt}
+        </p>
+        {draft.note ? (
+          <p className="at-why">
+            <AgentIcon size={12} className="inline-icon" /> {draft.note}
+          </p>
+        ) : null}
+        {draft.why ? <p className="at-muted">{draft.why}</p> : null}
+      </details>
       {error ? <p className="error small-note">{error}</p> : null}
     </article>
   );
